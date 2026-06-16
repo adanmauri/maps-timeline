@@ -7,6 +7,8 @@ dump*.xml
 .venv/
 __pycache__/
 *.pyc
+.coverage
+htmlcov/
 
 # Build artifacts
 dist/

@@ -237,7 +237,7 @@ failures before committing; if a hook auto-formats files, stage the result in a
 | `.github/workflows/` | CI (`tests`, `quality`, `security`, `release`) |
 | `data/drafts/` | Local PR/issue drafts from skills (under gitignored `data/`) |
 
-See [`.github/README.md`](../.github/README.md).
+See [`.agents/README.md`](../.agents/README.md).
 
 ---
 
