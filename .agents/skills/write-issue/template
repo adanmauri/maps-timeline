@@ -1,0 +1,63 @@
+## Description
+
+<!-- What failed or what should be built? Which command/screen (scrape, dump, parse-file, …)? -->
+
+## Environment
+
+<!-- Required for scrape/navigation/device bugs. Omit for docs-only or offline parser issues. -->
+
+| Field | Value |
+| --- | --- |
+| **Device** | <!-- e.g. Samsung Galaxy S23, Google Pixel 8 --> |
+| **Manufacturer / model** | <!-- `adb shell getprop ro.product.manufacturer` / `ro.product.model` --> |
+| **Screen resolution** | <!-- e.g. 1080×2400 px — `adb shell wm size` --> |
+| **Screen density (DPI)** | <!-- e.g. 420 dpi — `adb shell wm density` --> |
+| **Android version** | <!-- e.g. 14 (API 34) — `ro.build.version.release` / `ro.build.version.sdk` --> |
+| **OEM UI / skin** | <!-- e.g. One UI 6.1, MIUI 14, ColorOS, stock Pixel, HyperOS, EMUI --> |
+| **System build** | <!-- `adb shell getprop ro.build.display.id` (no serials) --> |
+| **Google Maps version** | <!-- `adb shell dumpsys package com.google.android.apps.maps \| grep versionName` --> |
+| **maps-timeline version** | <!-- e.g. 0.1.0 from pyproject.toml or `git rev-parse --short HEAD` --> |
+| **ADB driver** | <!-- `u2` (default) or `adb` (`--prefer adb`) --> |
+| **Host OS** | <!-- macOS / Linux / Windows + version --> |
+| **Maps UI language** | <!-- Timeline strings are Spanish in code; note if different --> |
+| **Locale / region** | <!-- e.g. es-AR --> |
+
+### Device settings that affect scraping
+
+- [ ] USB debugging enabled
+- [ ] Developer options: **animator / transition / window scale** set to off (recommended)
+- [ ] Screen stays on during scrape
+- [ ] Timeline open on **Rutas → Día** before `scrape` / `run`
+- [ ] Bottom sheet expanded (full day list visible)
+
+### Other factors
+
+<!-- Anything else that can make this fail: USB cable/hub, wireless ADB, battery saver, -->
+<!-- private DNS, work profile, Maps beta, accessibility services, font/display size, -->
+<!-- dark mode, split screen, foldable inner/outer display, etc. -->
+
+## Steps to reproduce
+
+1.
+2.
+
+## Expected behavior
+
+## Actual behavior
+
+<!-- Error message, where the loop stopped, `days_failed`, etc. -->
+
+## Artifacts
+
+<!-- Do not paste real addresses or place names. -->
+
+- [ ] `dump.xml` or `raw/debug/*.xml` attached (anonymized)
+- [ ] Screenshot from `raw/debug/*.png` if available
+- [ ] Relevant CLI output (redact paths with personal data)
+
+## Acceptance criteria
+
+<!-- For enhancements; delete for pure bug reports -->
+
+- [ ]
+- [ ]

@@ -1,0 +1,148 @@
+---
+name: Tests & Coverage
+
+on: # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - ready_for_review
+      - reopened
+      - synchronize
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+
+      - name: Install dependencies
+        run: uv sync --group dev --frozen
+
+      - name: Run tests with coverage
+        run: |
+          set -euo pipefail
+          uv run pytest \
+            --cov=maps_timeline \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-report=json \
+            -v
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            coverage.json
+          if-no-files-found: error
+
+  coverage_badge:
+    name: Update Coverage Badge
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-reports
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          python - << 'PY'
+          import json
+          import os
+
+          with open("coverage.json", "r", encoding="utf-8") as f:
+              d = json.load(f)
+
+          cov = float(d["totals"]["percent_covered"])
+          rounded = int(min(100, max(0, round(cov / 5) * 5)))
+
+          if cov >= 90:
+              color = "brightgreen"
+          elif cov >= 80:
+              color = "green"
+          elif cov >= 70:
+              color = "yellowgreen"
+          elif cov >= 60:
+              color = "yellow"
+          elif cov >= 50:
+              color = "orange"
+          else:
+              color = "red"
+
+          out_path = os.environ.get("GITHUB_OUTPUT", "")
+          with open(out_path, "a", encoding="utf-8") as out:
+              out.write(f"coverage={cov:.2f}\n")
+              out.write(f"rounded={rounded}\n")
+              out.write(f"color={color}\n")
+
+          print(f"Coverage: {cov:.2f}% (badge {rounded}%, {color})")
+          PY
+
+      - name: Update README coverage badge
+        id: readme
+        run: |
+          set -euo pipefail
+          ROUNDED="${{ steps.coverage.outputs.rounded }}"
+          COLOR="${{ steps.coverage.outputs.color }}"
+          NEW_BADGE="https://img.shields.io/badge/coverage-${ROUNDED}%25-${COLOR}.svg"
+
+          if grep -qF "$NEW_BADGE" README.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          sed -i "s|https://img.shields.io/badge/coverage-[0-9]\+%25-[a-z-]\+\.svg|$NEW_BADGE|g" README.md
+
+          if git diff --quiet README.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit coverage badge
+        if: steps.readme.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add README.md
+          git commit -m "chore: update coverage badge [skip ci]"
+          git push

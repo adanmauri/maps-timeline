@@ -1,0 +1,32 @@
+## Summary
+
+<!-- What changed and why. Link issues: Fixes #N -->
+
+## Type of change
+
+- [ ] Bug fix (non-breaking)
+- [ ] New feature (non-breaking)
+- [ ] Breaking change (JSONL schema, CLI flags, or output columns)
+- [ ] Documentation only
+- [ ] Tests only
+
+## Testing
+
+<!-- Commands actually run. Parser changes: which dump(s)? -->
+
+```bash
+make quality
+make test
+# uv run maps-timeline parse-file <dump>.xml   # if parser changed
+```
+
+- [ ] Offline tests pass (no phone required)
+- [ ] Live device test performed (scrape/navigation only — describe scope)
+
+## Checklist
+
+- [ ] Changes respect layer boundaries ([`docs/ARCHITECTURE.md`](../../../docs/ARCHITECTURE.md))
+- [ ] `maps_timeline/` stays at 100% test coverage
+- [ ] Docs updated when CLI, data layout, or behavior changed
+- [ ] No `data/`, real dumps, or location PII committed
+- [ ] Spanish UI strings in selectors left untranslated (Google Maps app)
