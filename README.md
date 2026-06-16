@@ -4,15 +4,22 @@
 
 ### Recover your Google Maps Timeline — straight from your Android phone
 
-[![Tests](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml/badge.svg)](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml)
-[![Code Quality](https://github.com/adanmauri/maps-timeline/actions/workflows/quality.yml/badge.svg)](https://github.com/adanmauri/maps-timeline/actions/workflows/quality.yml)
-[![Security](https://github.com/adanmauri/maps-timeline/actions/workflows/security.yaml/badge.svg)](https://github.com/adanmauri/maps-timeline/actions/workflows/security.yaml)
-[![coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/adanmauri/maps-timeline)
-[![Python](https://img.shields.io/badge/python-3.13+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![uv](https://img.shields.io/badge/uv-managed-7c3aed)](https://docs.astral.sh/uv/)
-[![Platform](https://img.shields.io/badge/host-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#prerequisites)
-[![Android](https://img.shields.io/badge/device-Android-3DDC84?logo=android&logoColor=white)](#prerequisites)
+[![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![uv](https://img.shields.io/badge/uv-managed-7C3AED?style=flat-square)](https://docs.astral.sh/uv/)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-374151?style=flat-square)](#prerequisites)
+[![Android](https://img.shields.io/badge/Android-device-3DDC84?style=flat-square&logo=android&logoColor=black)](#prerequisites)
+[![License](https://img.shields.io/badge/License-MIT-525252?style=flat-square&logo=opensourceinitiative&logoColor=white)](LICENSE)
+
+---
+
+<br />
+
+[![tests](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/tests.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=tests)](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml)
+[![quality](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/quality.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=quality)](https://github.com/adanmauri/maps-timeline/actions/workflows/quality.yml)
+[![security](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/security.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=security)](https://github.com/adanmauri/maps-timeline/actions/workflows/security.yaml)
+[![coverage](https://img.shields.io/badge/coverage-100%25-22C55E?style=flat-square&logo=pytest&logoColor=white)](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml)
+
+---
 
 Extract your Google Maps location history (**Timeline**) **directly from the app UI**
 on a physical Android device via **ADB** and the Android accessibility tree.
@@ -122,7 +129,7 @@ Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Requirement | macOS | Windows | Linux |
 | --- | --- | --- | --- |
-| **Python 3.13+** | Managed by `uv` | Managed by `uv` | Managed by `uv` |
+| **Python 3.13+** | Installed by `uv tool` if needed | [python.org](https://www.python.org/downloads/) or `winget install Python.Python.3.13` | Installed by `uv tool` if needed, or your distro / [python.org](https://www.python.org/downloads/) |
 | **[uv](https://docs.astral.sh/uv/)** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` | Same install script as macOS |
 | **ADB** | `brew install android-platform-tools` | [Platform-tools](https://developer.android.com/tools/releases/platform-tools) zip → add folder to `PATH` | e.g. `sudo apt install adb` (Debian/Ubuntu) or your distro's `android-tools` package |
 
@@ -134,15 +141,52 @@ After installing ADB, confirm it is on your `PATH`: `adb version`.
 2. Connect via USB and **accept the "Allow USB debugging?" prompt**.
 3. Verify: `adb devices` should list your phone.
 
-### Installation
+### Install as a tool
+
+Recommended if you only want to run the CLI — no clone, no local virtualenv to manage.
+
+**With [uv](https://docs.astral.sh/uv/)** (isolated global install):
+
+```bash
+uv tool install git+https://github.com/adanmauri/maps-timeline.git
+maps-timeline --help
+```
+
+**With [pipx](https://pipx.pypa.io/)** (Python 3.13+ on your `PATH`):
+
+```bash
+pipx install git+https://github.com/adanmauri/maps-timeline.git
+maps-timeline --help
+```
+
+**With pip** (into the active environment):
+
+```bash
+pip install git+https://github.com/adanmauri/maps-timeline.git
+```
+
+**From a GitHub release** ([Releases](https://github.com/adanmauri/maps-timeline/releases)):
+
+```bash
+pip install https://github.com/adanmauri/maps-timeline/releases/download/v0.1.0/maps_timeline-0.1.0-py3-none-any.whl
+```
+
+> Not published on PyPI yet. Requires **Python 3.13+** unless you use `uv tool install`.
+
+> The first scrape may install a small uiautomator2 helper app on the phone. This is expected.
+
+### Development install
+
+Clone the repo if you plan to change the code or run the test suite:
 
 ```bash
 git clone https://github.com/adanmauri/maps-timeline.git
 cd maps-timeline
-uv sync                              # creates .venv and installs everything
+uv sync                              # creates .venv and installs the package in editable mode
+uv run maps-timeline --help
 ```
 
-> The first scrape may install a small uiautomator2 helper app on the phone. This is expected.
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for `make quality`, tests, and pre-commit hooks.
 
 ### Prepare Google Maps
 
@@ -161,13 +205,16 @@ list visible is more reliable.
 
 ```bash
 # All-in-one: scrape N days, normalize, print summary
-uv run maps-timeline run --days 7
+maps-timeline run --days 7
 
 # Or step by step:
-uv run maps-timeline scrape --days 7
-uv run maps-timeline normalize
-uv run maps-timeline stats
+maps-timeline scrape --days 7
+maps-timeline normalize
+maps-timeline stats
 ```
+
+When using the **development install**, prefix commands with `uv run` (e.g.
+`uv run maps-timeline run --days 7`).
 
 Each default scrape creates a **versioned run folder** under `data/runs/`. The file
 `data/latest` points at the most recent run so `normalize` and `stats` work without extra
@@ -176,6 +223,9 @@ flags.
 <p align="right">(<a href="#table-of-contents">back to top</a>)</p>
 
 ## Commands
+
+Examples below use the `maps-timeline` command (tool install). With the development
+install, prefix with `uv run`.
 
 | Command | Phone? | What it does |
 | --- | :---: | --- |
@@ -192,22 +242,22 @@ Full option reference: [`docs/CLI.md`](docs/CLI.md).
 
 ```bash
 # Scrape a month, geocode addresses, show top 20 places
-uv run maps-timeline run --days 30 --geocode --nominatim-email you@example.com --top 20
+maps-timeline run --days 30 --geocode --nominatim-email you@example.com --top 20
 
 # Re-normalize the latest run after a parser upgrade (no phone)
-uv run maps-timeline normalize
+maps-timeline normalize
 
 # Re-normalize a specific run
-uv run maps-timeline normalize --jsonl data/runs/2026-06-16_143022/raw/timeline.jsonl
+maps-timeline normalize --jsonl data/runs/2026-06-16_143022/raw/timeline.jsonl
 
 # Force the raw ADB driver (no uiautomator2)
-uv run maps-timeline scrape --days 3 --prefer adb
+maps-timeline scrape --days 3 --prefer adb
 
 # Stop on navigation errors (default: skip and continue)
-uv run maps-timeline scrape --days 10 --on-error abort
+maps-timeline scrape --days 10 --on-error abort
 
 # Offline: verify parser against a saved dump
-uv run maps-timeline parse-file dump_dia.xml
+maps-timeline parse-file dump_dia.xml
 ```
 
 ### Optional geocoding
@@ -263,8 +313,8 @@ Schema details: [`docs/DATA.md`](docs/DATA.md).
 ## Explore & visualize
 
 ```bash
-uv run maps-timeline stats          # totals, busiest day, top places
-uv run maps-timeline stats --top 20
+maps-timeline stats          # totals, busiest day, top places
+maps-timeline stats --top 20
 ```
 
 ```python
@@ -300,8 +350,8 @@ from the `lat`/`lon` columns.
 Debug artifacts: `<run>/raw/debug/{date}_{tag}.xml` and `.png`.
 
 ```bash
-uv run maps-timeline dump --out dump.xml     # capture current screen
-uv run maps-timeline parse-file dump.xml     # test parser offline
+maps-timeline dump --out dump.xml     # capture current screen
+maps-timeline parse-file dump.xml     # test parser offline
 ```
 
 <p align="right">(<a href="#table-of-contents">back to top</a>)</p>
