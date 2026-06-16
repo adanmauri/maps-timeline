@@ -22,6 +22,16 @@ For pre-commit hooks (recommended before committing):
 make install-dev           # uv sync --group dev + pre-commit install
 ```
 
+Hooks are defined in `.pre-commit-config.yaml` and mirror the Make targets:
+
+| When | Hooks | Equivalent |
+| --- | --- | --- |
+| **commit** | trailing whitespace, YAML/TOML checks, black, isort, ruff --fix | `make format` |
+| **pre-push** | `make quality`, `make test` | ruff, flake8, pylint, mypy, pyright, bandit, pytest (100% coverage) |
+
+Run manually: `uv run pre-commit run --all-files` (commit stage) or add
+`--hook-stage pre-push` for the full gate.
+
 ### Verify
 
 ```bash
