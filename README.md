@@ -4,31 +4,20 @@
 
 ### Recover your Google Maps Timeline — straight from your Android phone
 
+[![Tests](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml/badge.svg)](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml)
+[![Code Quality](https://github.com/adanmauri/maps-timeline/actions/workflows/quality.yml/badge.svg)](https://github.com/adanmauri/maps-timeline/actions/workflows/quality.yml)
+[![Security](https://github.com/adanmauri/maps-timeline/actions/workflows/security.yaml/badge.svg)](https://github.com/adanmauri/maps-timeline/actions/workflows/security.yaml)
 [![coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/adanmauri/maps-timeline)
 [![Python](https://img.shields.io/badge/python-3.13+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![uv](https://img.shields.io/badge/uv-managed-7c3aed)](https://docs.astral.sh/uv/)
-[![Platform](https://img.shields.io/badge/platform-Android%20%2B%20macOS%20%2F%20Linux-lightgrey)](#prerequisites)
+[![Platform](https://img.shields.io/badge/host-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#prerequisites)
+[![Android](https://img.shields.io/badge/device-Android-3DDC84?logo=android&logoColor=white)](#prerequisites)
 
-Extract your Google Maps location history (**Timeline** / *Rutas*) **directly from the app UI**
-on a physical Android device — via **ADB** and the accessibility tree (uiautomator XML).
+Extract your Google Maps location history (**Timeline**) **directly from the app UI**
+on a physical Android device via **ADB** and the Android accessibility tree.
 
 No Google API. No Takeout. Your data stays on devices you control.
-
-<br />
-
-[**Quick start**](#quick-start) ·
-[**Docs**](docs/README.md) ·
-[**CLI reference**](docs/CLI.md) ·
-[**Report a bug**](https://github.com/adanmauri/maps-timeline/issues) ·
-[**Architecture**](docs/ARCHITECTURE.md)
-
-<br />
-
-```bash
-uv sync
-uv run maps-timeline run --days 7    # scrape → normalize → summary
-```
 
 </div>
 
@@ -104,7 +93,7 @@ flowchart LR
 
 1. Your phone shows the Timeline one day at a time inside Google Maps.
 2. The tool connects over USB and **reads the accessibility tree** (XML of UI nodes).
-3. It records every place and trip, taps **"Día anterior"** (*Previous day*), and repeats.
+3. It records every place and trip, taps **Previous day**, and repeats.
 4. A second stage parses durations, distances, and times into **CSV + Parquet**.
 
 Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -129,15 +118,17 @@ Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ### Prerequisites
 
-**Computer**
+**Computer** (macOS, Windows, or Linux)
 
-| Requirement | Notes |
-| --- | --- |
-| **Python 3.13+** | Checked automatically by `uv` |
-| **[uv](https://docs.astral.sh/uv/)** | Dependency and virtualenv manager |
-| **ADB** | `brew install android-platform-tools` on macOS |
+| Requirement | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| **Python 3.13+** | Managed by `uv` | Managed by `uv` | Managed by `uv` |
+| **[uv](https://docs.astral.sh/uv/)** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` | Same install script as macOS |
+| **ADB** | `brew install android-platform-tools` | [Platform-tools](https://developer.android.com/tools/releases/platform-tools) zip → add folder to `PATH` | e.g. `sudo apt install adb` (Debian/Ubuntu) or your distro's `android-tools` package |
 
-**Phone**
+After installing ADB, confirm it is on your `PATH`: `adb version`.
+
+**Phone** (Android)
 
 1. Enable **USB debugging** (*Settings → About phone → tap Build number 7× → Developer options → USB debugging*).
 2. Connect via USB and **accept the "Allow USB debugging?" prompt**.
@@ -155,8 +146,8 @@ uv sync                              # creates .venv and installs everything
 
 ### Prepare Google Maps
 
-On the phone, open **Google Maps → Timeline (*Rutas*) → Day (*Día*)** on the day you want
-to start stepping back from.
+On the phone, open **Google Maps → Timeline → Day** on the day you want to start
+stepping back from.
 
 **Recommended** (Developer options):
 
@@ -257,7 +248,7 @@ data/
 | --- | --- |
 | `day` | `YYYY-MM-DD` |
 | `type` | `place_visit`, `activity`, `unconfirmed_visit`, `unknown_visit`, `missing_transit` |
-| `title` | Place name or transport mode (e.g. `En automóvil`) |
+| `title` | Place name or transport mode (e.g. driving) |
 | `address` | Street address when shown |
 | `start_iso` / `end_iso` | Parsed clock times as ISO 8601 |
 | `duration_min` / `distance_km` | Numeric trip stats |
@@ -298,7 +289,7 @@ from the `lat`/`lon` columns.
 | --- | --- | --- |
 | `adb devices` shows nothing | Cable, driver, or debugging off | Re-plug USB, accept the prompt, try another cable |
 | `No export runs found` | Never scraped, or `data/` deleted | Run `scrape` or `run` first |
-| `Timeline 'Day' view is not visible` | Wrong Maps screen | Open **Rutas → Día** on the start day |
+| `Timeline 'Day' view is not visible` | Wrong Maps screen | Open **Timeline → Day** on the start day |
 | `activity list is collapsed` | Bottom sheet shows map only | Swipe the sheet up; scraper also tries to expand it |
 | `Expected date X but app shows Y` | Header drift / wrong start day | Re-open Maps on the intended day and retry |
 | `Could not find 'Previous day' button` | UI change or wrong language | Save a `dump`, check `content-desc` for the prev-day button |
