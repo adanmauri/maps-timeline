@@ -12,8 +12,6 @@
 
 ---
 
-<br />
-
 [![tests](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/tests.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=tests)](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml)
 [![quality](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/quality.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=quality)](https://github.com/adanmauri/maps-timeline/actions/workflows/quality.yml)
 [![security](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/security.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=security)](https://github.com/adanmauri/maps-timeline/actions/workflows/security.yaml)
