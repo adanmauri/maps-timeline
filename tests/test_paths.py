@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 
 from maps_timeline.paths import (
+    attach_export,
     clean_dir_for_jsonl,
     create_run_dir,
+    earlier_scrapes,
     read_latest_run_dir,
-    resolve_normalize_paths,
+    resolve_normalize_sources,
     resolve_scrape_out,
     resolve_stats_source,
+    run_date,
     run_stamp,
     write_latest_marker,
 )
+from tests.conftest import write_run_scrape
 
 
 def test_run_stamp_is_filesystem_safe():
@@ -84,36 +88,108 @@ def test_clean_dir_for_jsonl_non_raw_parent(tmp_path: Path):
     assert clean_dir_for_jsonl(jsonl) == Path("data/clean")
 
 
-def test_resolve_normalize_paths_from_latest(isolated_paths):
-    """Default normalize input/output come from the latest run."""
-    runs_root, marker = isolated_paths
-    run_dir = runs_root / "2026-06-10_120000"
-    jsonl = run_dir / "raw" / "timeline.jsonl"
-    jsonl.parent.mkdir(parents=True)
-    jsonl.write_text("{}\n", encoding="utf-8")
-    write_latest_marker(run_dir, marker=marker)
-
-    resolved_jsonl, clean = resolve_normalize_paths(None, None)
-
-    assert resolved_jsonl == jsonl
-    assert clean == run_dir / "clean"
-
-
-def test_resolve_normalize_paths_without_latest(isolated_paths):
-    """Fail clearly when no export runs exist yet."""
-    _runs_root, _marker = isolated_paths
-    with pytest.raises(FileNotFoundError, match="No export runs found"):
-        resolve_normalize_paths(None, None)
-
-
-def test_resolve_normalize_paths_missing_jsonl(isolated_paths):
-    """Fail clearly when the latest run has no raw JSONL yet."""
+def _latest_run(isolated_paths, *files: str) -> Path:
+    """Create the latest run with the given raw/ files and return its folder."""
     runs_root, marker = isolated_paths
     run_dir = runs_root / "2026-06-10_120000"
     (run_dir / "raw").mkdir(parents=True)
+    for name in files:
+        (run_dir / "raw" / name).write_text("{}\n", encoding="utf-8")
     write_latest_marker(run_dir, marker=marker)
-    with pytest.raises(FileNotFoundError, match="No raw JSONL"):
-        resolve_normalize_paths(None, None)
+    return run_dir
+
+
+def test_resolve_normalize_sources_from_latest(isolated_paths):
+    """Default normalize input/output come from the latest run."""
+    run_dir = _latest_run(isolated_paths, "timeline.jsonl")
+
+    jsonl, export, clean = resolve_normalize_sources(None, None, None)
+
+    assert jsonl == run_dir / "raw" / "timeline.jsonl"
+    assert export is None
+    assert clean == run_dir / "clean"
+
+
+def test_resolve_normalize_sources_picks_up_export(isolated_paths):
+    """An official export next to the JSONL is merged automatically."""
+    run_dir = _latest_run(isolated_paths, "timeline.jsonl", "export.json")
+
+    jsonl, export, _clean = resolve_normalize_sources(None, None, None)
+
+    assert jsonl == run_dir / "raw" / "timeline.jsonl"
+    assert export == run_dir / "raw" / "export.json"
+
+
+def test_resolve_normalize_sources_export_only_run(isolated_paths):
+    """A run created by 'import' has only the official export."""
+    run_dir = _latest_run(isolated_paths, "export.json")
+
+    jsonl, export, clean = resolve_normalize_sources(None, None, None)
+
+    assert jsonl is None
+    assert export == run_dir / "raw" / "export.json"
+    assert clean == run_dir / "clean"
+
+
+def test_resolve_normalize_sources_without_latest(isolated_paths):
+    """Fail clearly when no export runs exist yet."""
+    _runs_root, _marker = isolated_paths
+    with pytest.raises(FileNotFoundError, match="No export runs found"):
+        resolve_normalize_sources(None, None, None)
+
+
+def test_resolve_normalize_sources_empty_run(isolated_paths):
+    """Fail clearly when the latest run has no raw data yet."""
+    _latest_run(isolated_paths)
+    with pytest.raises(FileNotFoundError, match="No raw JSONL or official export"):
+        resolve_normalize_sources(None, None, None)
+
+
+def test_resolve_normalize_sources_missing_explicit_files(tmp_path: Path):
+    """Fail clearly when an explicit input does not exist."""
+    with pytest.raises(FileNotFoundError, match="No raw JSONL at"):
+        resolve_normalize_sources(tmp_path / "missing.jsonl", None, None)
+    with pytest.raises(FileNotFoundError, match="No official Timeline export"):
+        resolve_normalize_sources(None, tmp_path / "missing.json", None)
+
+
+def test_resolve_normalize_sources_explicit_export(tmp_path: Path):
+    """An explicit export alone is normalized on its own."""
+    export = tmp_path / "Timeline.json"
+    export.write_text("{}", encoding="utf-8")
+    out = tmp_path / "out"
+
+    assert resolve_normalize_sources(None, export, out) == (None, export, out)
+    assert resolve_normalize_sources(None, export, None)[2] == Path("data/clean")
+
+
+def test_attach_export_copies_into_raw(tmp_path: Path):
+    """Copy the export verbatim into raw/export.json, tolerating re-attaching the copy."""
+    source = tmp_path / "Timeline.json"
+    source.write_text('{"semanticSegments": []}', encoding="utf-8")
+    raw_dir = tmp_path / "run" / "raw"
+
+    target = attach_export(source, raw_dir)
+
+    assert target == raw_dir / "export.json"
+    assert target.read_text(encoding="utf-8") == source.read_text(encoding="utf-8")
+    assert attach_export(target, raw_dir) == target
+
+
+def test_run_date_from_stamp():
+    """Read the creation day from a run folder name; None for other folders."""
+    assert run_date(Path("data/runs/2026-06-10_153045")) == date(2026, 6, 10)
+    assert run_date(Path("data/clean")) is None
+
+
+def test_earlier_scrapes_oldest_first_without_current(isolated_paths):
+    """List every run's raw JSONL in run order, leaving out the current one."""
+    runs_root, _marker = isolated_paths
+    newer = write_run_scrape(runs_root, "2026-06-10_090000")
+    older = write_run_scrape(runs_root, "2026-06-08_100000")
+    (runs_root / "2026-06-09_100000" / "raw").mkdir(parents=True)  # export-only run
+    assert earlier_scrapes() == [older, newer]
+    assert earlier_scrapes(newer) == [older]
 
 
 def test_resolve_stats_source_from_latest(isolated_paths):

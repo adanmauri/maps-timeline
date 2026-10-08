@@ -139,6 +139,13 @@ uv run pytest tests/test_parser.py -v  # single file
 - `FakeDriver` — records taps/swipes, returns canned XML.
 - Synthetic XML builders for Timeline segments and headers.
 - Sample JSONL strings for normalization tests.
+- `official_export_payload()` / `sample_export` — a synthetic official Timeline export
+  that lines up with `sample_jsonl` (never use a real export in tests).
+- `isolated_paths` and `isolated_place_names_cache` — **autouse**: every test gets its own
+  `data/runs/`, `data/latest` and `data/cache/places.json` under `tmp_path`, so no test
+  reads or writes the repository's `data/` folder.
+- `write_run_scrape()` / `scraped_visit_day()` — build raw JSONL inside a versioned run
+  folder, for scrape-history and planning tests.
 
 ### Offline parser workflow
 

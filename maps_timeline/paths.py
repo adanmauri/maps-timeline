@@ -2,20 +2,32 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import shutil
+from datetime import date, datetime
 from pathlib import Path
 
 RUNS_DIR = Path("data/runs")
 LATEST_MARKER = Path("data/latest")
 RAW_JSONL = "timeline.jsonl"
+RAW_EXPORT = "export.json"  # official on-device Timeline export, copied verbatim
+PLACE_NAMES_CACHE = Path("data/cache/places.json")  # place ID -> name learned from scrapes
 CLEAN_PARQUET = "timeline.parquet"
 CLEAN_CSV = "timeline.csv"
+STAMP_FORMAT = "%Y-%m-%d_%H%M%S"
 
 
 def run_stamp(when: datetime | None = None) -> str:
     """Return a filesystem-safe directory name for one export run."""
     moment = when or datetime.now()
-    return moment.strftime("%Y-%m-%d_%H%M%S")
+    return moment.strftime(STAMP_FORMAT)
+
+
+def run_date(run_dir: Path) -> date | None:
+    """Return the day a versioned run was created, from its folder name (None otherwise)."""
+    try:
+        return datetime.strptime(run_dir.name, STAMP_FORMAT).date()
+    except ValueError:
+        return None
 
 
 def create_run_dir(*, runs_root: Path | None = None, when: datetime | None = None) -> Path:
@@ -59,22 +71,60 @@ def clean_dir_for_jsonl(jsonl: Path) -> Path:
     return Path("data/clean")
 
 
-def resolve_normalize_paths(
+def earlier_scrapes(current: Path | None = None) -> list[Path]:
+    """Return the raw JSONL of every run under data/runs/, oldest first, except `current`."""
+    skip = current.resolve() if current is not None else None
+    return [path for path in sorted(RUNS_DIR.glob(f"*/raw/{RAW_JSONL}")) if path.resolve() != skip]
+
+
+def attach_export(source: Path, raw_dir: Path) -> Path:
+    """Copy an official Timeline export into a run's raw/ folder and return the copy."""
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    target = raw_dir / RAW_EXPORT
+    if source.resolve() != target.resolve():
+        shutil.copyfile(source, target)
+    return target
+
+
+def resolve_normalize_sources(
     jsonl: Path | None,
+    export: Path | None,
     out: Path | None,
-) -> tuple[Path, Path]:
-    """Resolve raw JSONL input and clean output paths from CLI defaults."""
-    if jsonl is None:
+) -> tuple[Path | None, Path | None, Path]:
+    """Resolve the raw JSONL and/or official export plus the clean output folder.
+
+    Without explicit inputs, both come from the latest run's raw/ folder. An official
+    export sitting next to the JSONL (raw/export.json) is picked up automatically.
+    """
+    raw_dir: Path | None = None
+    if jsonl is None and export is None:
         run_dir = read_latest_run_dir()
         if run_dir is None:
-            msg = "No export runs found. Run 'scrape' or 'run' first, or pass --jsonl."
+            msg = "No export runs found. Run 'scrape', 'run' or 'import' first, or pass --jsonl."
             raise FileNotFoundError(msg)
-        jsonl = run_dir / "raw" / RAW_JSONL
-    if not jsonl.is_file():
-        msg = f"No raw JSONL at {jsonl}. Run 'scrape' or 'run' first, or pass --jsonl."
+        raw_dir = run_dir / "raw"
+        candidate = raw_dir / RAW_JSONL
+        jsonl = candidate if candidate.is_file() else None
+    if jsonl is not None:
+        if not jsonl.is_file():
+            msg = f"No raw JSONL at {jsonl}. Run 'scrape' or 'run' first, or pass --jsonl."
+            raise FileNotFoundError(msg)
+        raw_dir = jsonl.parent
+    if export is None and raw_dir is not None:
+        sibling = raw_dir / RAW_EXPORT
+        export = sibling if sibling.is_file() else None
+    if export is not None and not export.is_file():
+        msg = f"No official Timeline export at {export}. Check the path passed to --export."
         raise FileNotFoundError(msg)
-    clean_out = out if out is not None else clean_dir_for_jsonl(jsonl)
-    return jsonl, clean_out
+    source = jsonl if jsonl is not None else export
+    if source is None:
+        msg = (
+            f"No raw JSONL or official export in {raw_dir}. "
+            "Run 'scrape', 'run' or 'import' first, or pass --jsonl / --export."
+        )
+        raise FileNotFoundError(msg)
+    clean_out = out if out is not None else clean_dir_for_jsonl(source)
+    return jsonl, export, clean_out
 
 
 def resolve_stats_source(source: Path | None) -> Path:

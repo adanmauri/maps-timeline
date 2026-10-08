@@ -21,6 +21,11 @@ The work is split into **two independent stages**:
 Decoupling means you can **reprocess** raw exports after improving the parser
 without re-scanning the phone.
 
+Stage 2 has an optional second input: the **official on-device Timeline export**
+(`raw/export.json`, saved from Android settings). It has coordinates and place IDs but
+no names; the scrape has names but no coordinates. When both are present, `merge.py`
+aligns them by time and produces one dataset with the best of each.
+
 ## Data flow
 
 ```
@@ -34,7 +39,9 @@ parser.parse_day  ──►  DayTimeline (pydantic)
    │
    ▼
 pipeline.scrape loop  ──►  data/runs/<stamp>/raw/timeline.jsonl
-   │  normalize
+   │                         data/runs/<stamp>/raw/export.json   (optional, import / --export)
+   │  normalize (merge.build_dataset: scrape, export, or both merged;
+   │             with an export, every run's timeline.jsonl via history.load_history)
    ▼
 data/runs/<stamp>/clean/timeline.{csv,parquet}
    │  stats (optional)
@@ -52,7 +59,7 @@ Each default scrape creates a timestamped folder under `data/runs/` (see
 data/runs/2026-06-16_143022/
 ├── raw/
 │   ├── timeline.jsonl
-│   └── debug/          # failure artifacts (XML + PNG)
+│   └── debug/          # failure artifacts (XML + PNG, traceback .txt on device errors)
 └── clean/
     ├── timeline.csv
     └── timeline.parquet
@@ -66,31 +73,39 @@ interchangeable; parsing is testable offline with saved dumps.
 
 | Module | Layer | Responsibility |
 | --- | --- | --- |
-| `cli.py` | CLI | Typer commands: `run`, `scrape`, `normalize`, `stats`, `parse-file`, `dump`. Thin wiring only. |
-| `paths.py` | I/O layout | Versioned run directories, `data/latest` marker, default path resolution. |
-| `pipeline.py` | Orchestration | Day-by-day loop, date-drift checks, JSONL append, debug capture on failure. |
+| `cli.py` | CLI | Typer commands: `run`, `scrape`, `normalize`, `import`, `stats`, `parse-file`, `dump`. Thin wiring only. |
+| `paths.py` | I/O layout | Versioned run directories (and their creation date), `data/latest` marker, listing every run's raw JSONL, default path resolution, copying the official export into a run. |
+| `pipeline.py` | Orchestration | Day-by-day loop (full capture or step-over), date-drift checks, JSONL append, debug capture on failure, progress lines, graceful stop on Ctrl+C / device errors. |
 | `device.py` | Transport | `Driver` protocol: `U2Driver` (primary) and `AdbRawDriver` (fallback). `make_driver()` picks one. |
 | `navigator.py` | Navigation | Read the English date header; tap "Día anterior". Date arithmetic is the source of truth; the header **verifies** navigation. |
 | `waits.py` | Synchronization | Stable-screen waits, panel expansion, scroll-to-top after day changes, `dump_full_timeline()`. |
 | `scroll.py` | Gestures | Compute swipe lanes from segment button bounds; expand collapsed bottom sheet. |
 | `parser.py` | Parsing | Pure: XML string → `DayTimeline`. Never touches the device. |
 | `normalize.py` | Normalization | JSONL → pandas DataFrame → CSV + Parquet. |
+| `official.py` | Parsing | Pure: official Timeline export JSON → `OfficialSegment` list (visits, activities). |
+| `history.py` | Normalization | Read every run's raw JSONL into one scrape history: latest capture per day, and which captures are complete. |
+| `merge.py` | Normalization | Align scraped entries with official segments, propagate names by place ID, keep the place-name cache, build the merged dataset from the scrape history. |
+| `planner.py` | Planning | Pure: from the official export, known names and captured days, choose which days to capture (`ScrapePlan`). |
 | `geocode.py` | Enrichment | Optional Nominatim geocoder with disk cache and rate limiting. |
 | `stats.py` | Reporting | Pure functions over a DataFrame → console summary. |
-| `models.py` | Domain | Pydantic models and enums (`SegmentType`, `TimeAnchor`). |
+| `models.py` | Domain | Pydantic models and enums (`SegmentType`, `TimeAnchor`, `OfficialSegmentKind`). |
 
 ### Dependency direction
 
 ```
-cli → pipeline, normalize, stats, paths, device, geocode
+cli → pipeline, merge, official, planner, stats, paths, device, geocode
 pipeline → navigator, parser, waits, device, models
 waits → scroll, parser, device
 navigator → device, parser (header helpers)
+merge → history, normalize, official, models
+history → normalize, paths
+official → models
+planner → models
 normalize → geocode (optional)
 ```
 
-Nothing in `parser`, `models`, `normalize`, `stats`, or `geocode` imports device
-code. That boundary is what keeps offline tests fast and reliable.
+Nothing in `parser`, `models`, `official`, `planner`, `history`, `merge`, `normalize`,
+`stats`, or `geocode` imports device code. That boundary is what keeps offline tests fast and reliable.
 
 ## Scraping loop (pipeline)
 
@@ -114,6 +129,43 @@ For each requested day, `pipeline.scrape()`:
    consecutive dumps hash identically; advance `expected` date by −1 day.
 
 Navigation failures capture a screenshot and honor `--on-error skip|abort`.
+
+**Stopping early.** Ctrl+C (`KeyboardInterrupt`) or any exception raised while walking
+(lost USB / adb connection, uiautomator2 or app errors) ends the loop instead of the
+process: the traceback goes to `debug/{date}_error.txt`, `ScrapeResult.stopped` records
+why, and the CLI still merges the days already appended to the JSONL. Each day is
+written as soon as it is parsed, so nothing captured is lost.
+
+### Planned walk (`--export` without `--days`)
+
+Before planning, the CLI loads the **scrape history** (`history.load_history` over every
+run's `raw/timeline.jsonl`) and learns the names it already teaches
+(`merge.learned_so_far`: history matched to the export, plus `data/cache/places.json`).
+`planner.plan_scrape()` then turns the official export into a `ScrapePlan`:
+
+1. Collect visits up to the start day (`--until`, today by default) whose place ID has
+   no known name.
+2. Drop days the history captured **completely** (the run started after the day ended):
+   they are never planned again. Each one counts as an attempt for the unnamed places it
+   shows; after `MAX_ATTEMPTS` (2), or with no uncaptured day left, a place is skipped.
+3. Target every place left, or with `--since` only those with an uncaptured visit on or
+   after that day. Each place only needs its most recent such day; the oldest of those
+   is how far the walk must go.
+4. Always add the days the export does not reach (from its last day to the start day,
+   minus complete captures and days before `--since`), then pick the fewest extra days that show every chosen place
+   (greedy set cover seeded with those days, ties to the more recent day).
+
+`ScrapePlan.describe()` prints the plan (counts and ISO dates only), a tip when the newest
+planned day is `TIP_MIN_DAYS` (7) or more back (opening the Timeline there skips the newer
+days), and how many places were skipped.
+
+`pipeline.scrape(only_days=plan.days)` then walks back as usual, but days outside the
+plan are only **stepped over**: the stable dump left by the previous tap is reused to
+verify the header date and find "Día anterior" (no panel expansion, scrolling, or
+parsing). The loop stops once it is past the oldest planned day. The start day is always
+read in full once, because its date is not known before the first dump; planned days
+newer than it are reported as unreachable. Every `PROGRESS_EVERY` (25) days a progress
+line shows walked / captured counts and an estimate of the time left.
 
 ## Why scraping the UI works
 
@@ -159,6 +211,34 @@ against parsed visit counts.
 The map itself is a `SurfaceView` — a graphical canvas with no useful
 accessibility text. Coordinates are **not** available from scraping; use
 `--geocode` during normalization if you need `lat`/`lon`.
+
+## Merging with the official export
+
+`merge.build_dataset()` dispatches: scrape only → `normalize()` (unchanged output);
+export present → `merge_rows()` over the scrape history (the run's own JSONL plus every
+other run's, latest capture per day):
+
+1. **Parse** the export (`official.py`): keep `semanticSegments` visits and activities,
+   with timezone-aware times; ignore `timelinePath`, `rawSignals`, `userLocationProfile`.
+2. **Intervals.** Each scraped entry becomes a local wall-clock interval: `range` as
+   shown (wrapping past midnight if needed), `departure` = midnight → time,
+   `arrival` = time → midnight, `all_day` = the whole day. Official intervals drop the
+   UTC offset and are truncated to minutes, like the app's clock.
+3. **Candidates.** For each scraped entry, score official segments of the same kind that
+   touch that day (clipped to the day, widened to fit the entry) by intersection over
+   union; keep scores ≥ `MIN_MATCH_SCORE` (0.5).
+4. **Assignment.** Greedy by score: each scraped entry is used once, each official
+   segment once **per day** (a visit across midnight takes the arrival entry of one day
+   and the departure entry of the next).
+5. **Propagation.** The most common scraped `(title, address)` per place ID names every
+   other visit to that place, on top of the names cached from earlier runs (fresh names
+   win; the cache is rewritten after each merge). The most common scraped label per
+   activity type names unmatched trips (falling back to the raw type, e.g. `IN_BUS`).
+6. **Rows.** One row per official segment (official times, distances, coordinates; UI
+   type, name, `confirmed`, `needs_user_action`) plus one row per unmatched scraped entry.
+
+The console report prints counts only (matched entries, named visits), never names or
+coordinates.
 
 ## Segment classification
 
@@ -215,13 +295,17 @@ client to Nominatim with:
 | Richest-dump selection | `waits.dump_full_timeline()` | Prefer dumps with more in-bounds segments |
 | Panel expansion | `scroll.py` + `waits.py` | Recover from collapsed sheet |
 | `on_error` policy | `pipeline.py` | `skip` failed days vs `abort` entire run |
+| Graceful stop | `pipeline.py` | Ctrl+C / device errors end the walk; captured days are kept and merged |
+| Scrape history | `history.py` + `planner.py` | Resume long walks: days captured by any run are reused, not walked to again |
 
 ## Testing strategy
 
 Tests live under `tests/`, one file per module, with shared fixtures in
 `conftest.py` (`FakeDriver`, synthetic XML builders, sample JSONL).
 
-- **Parser / normalize / stats / models:** pure functions, no I/O.
+- **Parser / normalize / official / planner / merge / stats / models:** pure functions, no I/O.
+- **History / paths:** temporary run folders (`write_run_scrape`); every test points
+  `data/runs/`, `data/latest` and the place-name cache at `tmp_path` (autouse fixtures).
 - **Pipeline / navigator / waits / scroll:** `FakeDriver` or saved XML strings.
 - **Device:** subprocess mocks for `adb` calls.
 - **Geocode:** HTTP mocked.
@@ -238,6 +322,8 @@ Coverage is enforced at **100% line and branch** on `maps_timeline/`. See
 | Different output columns | `normalize.py` | `tests/test_normalize.py` + re-run on JSONL |
 | New wait/heuristic | `waits.py`, `scroll.py` | unit tests with synthetic XML |
 | Path layout | `paths.py` | `tests/test_paths.py` |
+| Official export field or matching rule | `official.py`, `merge.py` | `tests/test_official.py`, `tests/test_merge.py` |
+| Planning rule (which days to capture) | `planner.py` | `tests/test_planner.py` |
 
 Preserve **raw JSONL compatibility** when changing `models.py` field names or
 structure, or document the breaking change explicitly.

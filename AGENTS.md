@@ -24,6 +24,15 @@ The core idea is a **two-stage, decoupled design**:
 Splitting the two stages makes it possible to **reprocess** the raw data (for
 example, when improving the parser) without having to re-scan the phone.
 
+Stage 2 accepts an optional second raw input: the **official on-device Timeline
+export** that Android saves from its settings (`raw/export.json`). It has coordinates
+and Google place IDs but no names; `merge.py` aligns it with the scrape by time and
+propagates scraped names to every visit with the same place ID. The export can also
+drive stage 1: `planner.py` picks only the days that show still-unnamed places, and the
+scraper steps over the rest. With an export, every run's raw JSONL counts
+(`history.py`): days captured by any run are merged into the dataset and never planned
+again, so an interrupted walk resumes instead of starting over.
+
 The code (docstrings, comments, and CLI messages) is written in **English**,
 which is the project's language. The only Spanish strings allowed in the code are
 **UI selectors / regexes that must match the Google Maps app**, which renders in
@@ -36,7 +45,7 @@ be translated.
 .
 ├── maps_timeline/
 │   ├── __init__.py      # package version
-│   ├── cli.py           # command-line interface (typer): run, scrape, normalize, stats, parse-file, dump
+│   ├── cli.py           # command-line interface (typer): run, scrape, normalize, import, stats, parse-file, dump
 │   ├── device.py        # transport layer: Driver (Protocol), U2Driver, AdbRawDriver, make_driver
 │   ├── navigator.py     # navigation: read the header date and step back one day
 │   ├── parser.py        # pure parsing of the XML dump -> DayTimeline (testable with saved dumps)
@@ -45,13 +54,17 @@ be translated.
 │   ├── scroll.py        # Timeline list swipe gestures from segment bounds
 │   ├── waits.py         # explicit waits, panel expansion, dump_full_timeline
 │   ├── normalize.py     # raw JSONL -> DataFrame -> CSV + Parquet (pandas)
+│   ├── official.py      # pure parsing of the official on-device Timeline export (JSON)
+│   ├── history.py       # every run's raw JSONL as one scrape history (latest capture per day)
+│   ├── merge.py         # align scrape + official export, propagate names, build dataset
+│   ├── planner.py       # pure: choose which days to capture from the official export
 │   ├── geocode.py       # optional: NominatimGeocoder (addresses -> lat/lon, cached)
 │   ├── stats.py         # console summary over the clean DataFrame
-│   └── models.py        # domain models (pydantic): Segment, DaySummary, DayTimeline, enums
+│   └── models.py        # domain models (pydantic): Segment, DayTimeline, OfficialSegment, enums
 ├── data/                # gitignored — sensitive exports (see docs/DATA.md)
 │   ├── latest           # pointer to most recent run
-│   ├── cache/           # geocode.json (Nominatim cache)
-│   └── runs/<stamp>/    # raw/timeline.jsonl + clean/timeline.{csv,parquet}
+│   ├── cache/           # geocode.json (Nominatim), places.json (place ID -> learned name)
+│   └── runs/<stamp>/    # raw/timeline.jsonl (+ raw/export.json) + clean/timeline.{csv,parquet}
 ├── docs/                # ARCHITECTURE, CLI, DATA, DEVELOPMENT guides
 ├── tests/               # one test file per module + conftest.py
 ├── dump_*.xml           # sample XML dumps for offline testing (parse-file)
@@ -76,11 +89,15 @@ without a connected phone:
 | Gestures | `scroll.py` | Compute swipe lanes from segment button bounds; expand collapsed Timeline panel. |
 | Waits | `waits.py` | Stable-screen waits, `dump_full_timeline()`, panel expansion orchestration. |
 | Parsing | `parser.py` | Convert the XML into a `DayTimeline`. **Pure function**: operates on the XML, never touches the device. |
-| Orchestration | `pipeline.py` | Day-by-day scraping loop, date-drift checks, debug artifacts, and writing the raw JSONL. |
+| Orchestration | `pipeline.py` | Day-by-day scraping loop (capture or step over), date-drift checks, debug artifacts, progress lines, and writing the raw JSONL. Ctrl+C / device errors end the walk but keep the captured days. |
 | Normalization | `normalize.py` | Flatten the JSONL into a DataFrame and write CSV + Parquet; optionally add lat/lon via a geocoder. |
+| Official export | `official.py` | **Pure** parsing of the official on-device Timeline export (`semanticSegments` visits and activities) into `OfficialSegment` models. |
+| History | `history.py` | Read every run's raw JSONL into one scrape history: the latest capture of each day and which captures are complete (taken after the day ended). |
+| Merge | `merge.py` | Align scraped entries with official segments by time overlap, propagate names by place ID (plus the place-name cache), and build the merged dataset. Pure apart from reading/writing files. |
+| Planning | `planner.py` | **Pure**: from the official export, already-known names and already-captured days, choose the days to capture (`ScrapePlan`) so `pipeline.scrape(only_days=...)` steps over the rest. |
 | Geocoding | `geocode.py` | Optional post-processing: resolve addresses to lat/lon via Nominatim (OpenStreetMap), with caching and rate limiting. Pure HTTP, no device access. |
 | Reporting | `stats.py` | Console summary (totals, top places) from the clean DataFrame. Pure functions, no device access. |
-| Models | `models.py` | Domain structures (pydantic) and enums (`SegmentType`, `TimeAnchor`). |
+| Models | `models.py` | Domain structures (pydantic) and enums (`SegmentType`, `TimeAnchor`, `OfficialSegmentKind`). |
 
 **Key principle**: all the intelligence (finding nodes, classifying segments,
 reading dates) operates **on the XML**, not on the device. This keeps the
@@ -97,7 +114,8 @@ pipeline.scrape  ──parse_day──►  DayTimeline (pydantic)
    │
    ▼
 data/runs/<stamp>/raw/timeline.jsonl   (one day per line, raw data)
-   │  normalize
+data/runs/<stamp>/raw/export.json      (optional: official Timeline export, verbatim)
+   │  normalize / import  (merge.build_dataset; with an export, every run's JSONL)
    ▼
 data/runs/<stamp>/clean/timeline.csv  +  timeline.parquet  (clean dataset)
    │  stats (optional)
@@ -274,8 +292,15 @@ uv run maps-timeline run --days 3
 # Walk the Timeline day by day and save the raw JSONL
 uv run maps-timeline scrape --days 3
 
-# Convert the raw JSONL into CSV + Parquet
+# Convert the raw JSONL (and raw/export.json, if present) into CSV + Parquet
 uv run maps-timeline normalize
+
+# Import the official on-device Timeline export (new run, or --run to merge with a scrape)
+uv run maps-timeline import Timeline.json
+
+# Let the official export plan the walk (captures only days with unnamed places)
+uv run maps-timeline run --export Timeline.json
+# (Ctrl+C keeps what was captured; run it again to continue where the plan left off)
 
 # Print a console summary of the clean dataset
 uv run maps-timeline stats
@@ -380,5 +405,5 @@ Use clear, concise language; include only short snippets when necessary.
 
 ---
 
-**Last Updated**: 2026-06-16
-**Version**: 2.3
+**Last Updated**: 2026-10-08
+**Version**: 2.5

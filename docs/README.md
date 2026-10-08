@@ -5,7 +5,7 @@
 | [../README.md](../README.md) | Project overview, quick start, troubleshooting |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design, scraping loop, UI findings |
 | [CLI.md](CLI.md) | Complete command-line reference |
-| [DATA.md](DATA.md) | JSONL, CSV, Parquet schemas and geocoding |
+| [DATA.md](DATA.md) | JSONL, official export, CSV, Parquet schemas and geocoding |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Contributor setup, testing, quality gates |
 | [../AGENTS.md](../AGENTS.md) | Guidelines for AI coding agents |
 | [../.agents/README.md](../.agents/README.md) | Project agent skills (`create-branch`, `write-issue`, …) |

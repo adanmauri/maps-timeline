@@ -20,7 +20,8 @@
 ---
 
 Extract your Google Maps location history (**Timeline**) **directly from the app UI**
-on a physical Android device via **ADB** and the Android accessibility tree.
+on a physical Android device via **ADB** and the Android accessibility tree — and merge
+it with the phone's official Timeline export to get place names *and* coordinates.
 
 No Google API. No Takeout. Your data stays on devices you control.
 
@@ -48,14 +49,18 @@ No Google API. No Takeout. Your data stays on devices you control.
 
 ## About
 
-Google **removed the ability to download your own location history**. The Timeline used to
-be exportable from your account (Google Takeout / Maps Timeline export). That changed:
-Google **migrated the Timeline to on-device storage**. Your history now lives **only on
-your phone** — viewable day by day inside the Maps app, with **no official bulk export**.
+Google **migrated the Timeline to on-device storage**: your history now lives **on your
+phone**, and Google Takeout no longer includes it. Android can still export it
+(*Settings → Location → Location services → Timeline → Export Timeline data*), but that
+file has **coordinates and Google place IDs only — no place names or addresses**.
 
-`maps-timeline` works around that by **reading what the app renders on screen**: it drives
-the phone over ADB, walks the Timeline backwards one day at a time, and reconstructs a
-structured dataset you can analyze in CSV, Parquet, or pandas.
+`maps-timeline` fills the gap by **reading what the Maps app renders on screen**: it drives
+the phone over ADB, walks the Timeline backwards one day at a time, and captures the names,
+addresses and transport labels the app shows. On its own that gives you a structured
+dataset you can analyze in CSV, Parquet, or pandas. **Merged with the official export**, it
+gives you every visit with exact coordinates *and* a readable name: names learned on
+scraped days are reused for every other visit to the same place, even on days you never
+scraped.
 
 > **Disclaimer:** unofficial tool. It does not call any Google API — it only reads the
 > accessibility hierarchy of Google Maps already installed on **your** phone.
@@ -67,6 +72,8 @@ structured dataset you can analyze in CSV, Parquet, or pandas.
 | | |
 | --- | --- |
 | **Two-stage pipeline** | Raw scrape (JSONL) decoupled from normalization — reprocess without re-scanning the phone |
+| **Official export merge** | Import Android's Timeline export (coordinates, place IDs) and merge it with the scrape (names, addresses) |
+| **Export-driven scraping** | The export decides which days to capture: only days that show still-unnamed places; the rest are stepped over |
 | **Versioned exports** | Each run lands in `data/runs/<timestamp>/` with a `data/latest` pointer |
 | **Offline parser tests** | `parse-file` works on saved XML dumps — no device required |
 | **Optional geocoding** | Resolve addresses to lat/lon via Nominatim (OpenStreetMap), cached locally |
@@ -94,12 +101,17 @@ flowchart LR
   ADB --> JSONL
   JSONL --> CSV
   JSONL --> PQ
+  Maps -.->|Export Timeline data| EXP[raw/export.json]
+  EXP -.->|merge| CSV
+  EXP -.->|merge| PQ
 ```
 
 1. Your phone shows the Timeline one day at a time inside Google Maps.
 2. The tool connects over USB and **reads the accessibility tree** (XML of UI nodes).
 3. It records every place and trip, taps **Previous day**, and repeats.
 4. A second stage parses durations, distances, and times into **CSV + Parquet**.
+5. *Optional:* with the official export imported, visits and trips are aligned by time and
+   enriched with exact coordinates, place IDs, and UTC offsets.
 
 Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -218,6 +230,56 @@ Each default scrape creates a **versioned run folder** under `data/runs/`. The f
 `data/latest` points at the most recent run so `normalize` and `stats` work without extra
 flags.
 
+### Merge the official Timeline export (recommended)
+
+1. On the phone: *Settings → Location → Location services → Timeline → Export Timeline
+   data* → authenticate → save the file (the name may be localized, e.g. `Rutas.json`).
+   Tip: search "Timeline" in Settings if the menu path differs on your device.
+2. Copy it to your computer, e.g. `adb pull "/sdcard/Download/Timeline.json" .`
+3. Run with it:
+
+```bash
+# Recommended: the export plans the walk, the phone only provides the names
+maps-timeline run --export Timeline.json
+
+# Shorter walk: only name places visited since a date (older visits to them too)
+maps-timeline run --export Timeline.json --since 2025-11-01
+
+# Only a date range (newer days are stepped over, or open the Timeline on --until first)
+maps-timeline run --export Timeline.json --since 2026-01-01 --until 2026-03-31
+
+# Export only, no phone: full history with coordinates (names from earlier runs)
+maps-timeline import Timeline.json
+```
+
+How `run --export` works (without `--days`):
+
+1. **Plan.** It reads the export and lists the visits whose place has no name yet. Names
+   already known come from `data/cache/places.json` and from every earlier run's scrape.
+   One day per place is enough, because a name applies to every visit with the same
+   place ID. It walks back only as far as needed and picks the fewest days that show
+   those places. It also captures the days the export does not reach (from its last day
+   to today). Days an earlier run already captured are never planned again.
+2. **Walk.** Starting from the day shown in Maps, it steps back one day at a time. Planned
+   days are fully captured; every other day is only stepped over (date check + tap). A
+   progress line with an estimate of the time left is printed every 25 days.
+3. **Merge.** Every scraped day (this run and earlier ones) is aligned with the export by
+   time; names propagate by place ID to the whole history and are saved to the cache, so
+   the next run only looks for new places.
+
+**Long walks can be resumed.** Ctrl+C or a lost connection stops the walk but keeps
+(and merges) the days captured so far. Run the same command again: the plan skips the
+days already captured. If its newest planned day is far back, the plan prints a tip:
+open the Timeline on that day (calendar) before starting, to skip walking the newer days.
+
+Places the app does not show (e.g. visits nested inside another one) are looked for on at
+most two captured days and then reported as skipped, instead of being planned forever.
+
+`--days N` still forces a plain walk of N days (merged with the export when given).
+`scrape --export` plans the same way but leaves the merge to a later `normalize`. The
+export is copied verbatim into the run (`raw/export.json`); delete stray copies from
+`Downloads` afterwards.
+
 <p align="right">(<a href="#table-of-contents">back to top</a>)</p>
 
 ## Commands
@@ -228,8 +290,9 @@ install, prefix with `uv run`.
 | Command | Phone? | What it does |
 | --- | :---: | --- |
 | `run` | Yes | Scrape → normalize → print summary |
-| `scrape` | Yes | Walk the Timeline backwards, write raw JSONL |
-| `normalize` | No | JSONL → CSV + Parquet |
+| `scrape` | Yes | Walk the Timeline backwards (optionally planned by `--export`), write raw JSONL |
+| `normalize` | No | JSONL and/or official export (plus earlier runs' scrapes) → CSV + Parquet |
+| `import` | No | Copy the official Timeline export into a run and build the dataset |
 | `stats` | No | Console summary of the clean dataset |
 | `parse-file` | No | Offline parser test on a saved XML dump |
 | `dump` | Yes | Save one screen dump (debug selectors) |
@@ -247,6 +310,12 @@ maps-timeline normalize
 
 # Re-normalize a specific run
 maps-timeline normalize --jsonl data/runs/2026-06-16_143022/raw/timeline.jsonl
+
+# Merge a scrape with an official export without copying it into the run
+maps-timeline normalize --jsonl data/runs/2026-06-16_143022/raw/timeline.jsonl --export Timeline.json
+
+# Attach the export to an existing scrape run and merge both
+maps-timeline import Timeline.json --run "$(cat data/latest)"
 
 # Force the raw ADB driver (no uiautomator2)
 maps-timeline scrape --days 3 --prefer adb
@@ -266,6 +335,7 @@ resolve addresses via **Nominatim (OpenStreetMap)**.
 - Best-effort: approximate results, especially without street numbers.
 - Cached in `data/cache/geocode.json`.
 - Rate-limited (~1 req/s). Pass `--nominatim-email`.
+- Rows that come from the official export already have exact coordinates and are skipped.
 
 Details: [`docs/DATA.md`](docs/DATA.md#geocoding).
 
@@ -279,11 +349,13 @@ Sensitive exports live under `data/`, which is **gitignored**.
 data/
 ├── latest                          # text file → path of the most recent run
 ├── cache/
-│   └── geocode.json                # Nominatim cache (--geocode)
+│   ├── geocode.json                # Nominatim cache (--geocode)
+│   └── places.json                 # place ID -> name learned from scrapes
 └── runs/
     └── 2026-06-16_143022/          # one export run (timestamp)
         ├── raw/
         │   ├── timeline.jsonl      # one JSON object per day (raw text)
+        │   ├── export.json         # official Timeline export (import / --export)
         │   └── debug/              # XML + PNG on parse/navigation failures
         └── clean/
             ├── timeline.csv
@@ -302,7 +374,13 @@ data/
 | `duration_min` / `distance_km` | Numeric trip stats |
 | `confirmed` | `false` for unconfirmed visits |
 | `needs_user_action` | `true` when Google could not fully resolve the segment |
-| `lat` / `lon` | Present when exported with `--geocode` |
+| `lat` / `lon` | From the official export (visits), or from `--geocode` |
+
+With the official export the dataset has **one row per official visit or trip** plus any
+scraped entries that matched none (from this run and every earlier run), and adds `place_id`, `semantic_type`, `probability`,
+`hierarchy_level`, `activity_type`, `start_lat`/`start_lon`/`end_lat`/`end_lon`,
+`tz_offset_min`, `source` (`both` / `export` / `scrape`), `title_source`, and
+`match_score`.
 
 Schema details: [`docs/DATA.md`](docs/DATA.md).
 
@@ -336,11 +414,16 @@ from the `lat`/`lon` columns.
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
 | `adb devices` shows nothing | Cable, driver, or debugging off | Re-plug USB, accept the prompt, try another cable |
-| `No export runs found` | Never scraped, or `data/` deleted | Run `scrape` or `run` first |
+| `No export runs found` | Never scraped, or `data/` deleted | Run `scrape`, `run` or `import` first |
+| `Unsupported Timeline export` | Takeout file or a non-Android export | Use the phone export: *Settings → Location → Timeline → Export Timeline data* |
+| No "Export Timeline data" option | Timeline off, outdated Maps / Play services, staged rollout | Turn Timeline on in Maps, update both apps, search "Timeline" in Settings |
 | `Timeline 'Day' view is not visible` | Wrong Maps screen | Open **Timeline → Day** on the start day |
 | `activity list is collapsed` | Bottom sheet shows map only | Swipe the sheet up; scraper also tries to expand it |
 | `Expected date X but app shows Y` | Header drift / wrong start day | Re-open Maps on the intended day and retry |
 | `Could not find 'Previous day' button` | UI change or wrong language | Save a `dump`, check `content-desc` for the prev-day button |
+| `Walk stopped early` | Ctrl+C, cable, adb or app error mid-walk | Captured days are kept and merged; run the same command again. Errors leave a traceback in `raw/debug/{date}_error.txt` |
+| `planned days are newer than ...` | Maps opened on an older day than the plan needs | Open the Timeline on the day the message names, then retry |
+| `Skipping N unnamed places` | The app does not show them (e.g. nested visits) or their visits do not match | Nothing to do; they keep their coordinates and place ID |
 | `0 segments but summary shows N visits` | Parser mismatch | Check `raw/debug/` XML; file an issue with an anonymized dump |
 | uiautomator2 connection fails | Helper app not installed | Retry; or use `--prefer adb` |
 | Geocoding is slow | Many unique addresses | Normal — cached after first run; ~1 addr/sec |
@@ -357,7 +440,9 @@ maps-timeline parse-file dump.xml     # test parser offline
 ## Privacy
 
 Your location history is **sensitive personal data**. Everything under `data/` contains
-real places and timestamps — **never commit or share it**. This tool only reads from a
+real places and timestamps — **never commit or share it**. The official export also holds
+raw GPS fixes and nearby Wi-Fi scans; `import` only reads visits and trips from it, but
+copies the file verbatim into the run. This tool only reads from a
 device you control; it does not upload your Timeline anywhere (except optional Nominatim
 lookups when you pass `--geocode`).
 

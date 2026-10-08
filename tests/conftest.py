@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -106,14 +108,38 @@ class FakeDriver:
         return self.healthy
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
+def isolated_place_names_cache(tmp_path: Path, monkeypatch) -> Path:
+    """Keep the place-name cache out of the repository's data/ folder in every test."""
+    cache = tmp_path / "cache" / "places.json"
+    monkeypatch.setattr(paths, "PLACE_NAMES_CACHE", cache)
+    return cache
+
+
+@pytest.fixture(autouse=True)
 def isolated_paths(tmp_path: Path, monkeypatch):
-    """Point run storage and the latest marker at a temporary directory."""
+    """Point run storage and the latest marker at a temporary directory (in every test)."""
     runs_root = tmp_path / "runs"
     marker = tmp_path / "latest"
     monkeypatch.setattr(paths, "RUNS_DIR", runs_root)
     monkeypatch.setattr(paths, "LATEST_MARKER", marker)
     return runs_root, marker
+
+
+def write_run_scrape(runs_root: Path, stamp: str, *lines: str) -> Path:
+    """Write a raw JSONL inside a versioned run folder and return its path."""
+    jsonl = runs_root / stamp / "raw" / "timeline.jsonl"
+    jsonl.parent.mkdir(parents=True, exist_ok=True)
+    jsonl.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    return jsonl
+
+
+def scraped_visit_day(day: str, start: str = "10:00 AM", end: str = "11:00 AM") -> str:
+    """Build one raw JSONL line with a single named 'Cafe' visit on `day`."""
+    return (
+        f'{{"day":"{day}","segments":[{{"type":"place_visit","title":"Cafe",'
+        f'"address":"Main 1","start_time":"{start}","end_time":"{end}"}}]}}'
+    )
 
 
 def patch_instant_waits(
@@ -158,6 +184,69 @@ def sample_jsonl(tmp_path: Path) -> Path:
     )
     path = tmp_path / "timeline.jsonl"
     path.write_text(payload, encoding="utf-8")
+    return path
+
+
+def official_export_payload() -> dict[str, Any]:
+    """Build a small official Timeline export that lines up with `sample_jsonl`."""
+    return {
+        "semanticSegments": [
+            {
+                "startTime": "2026-06-06T16:00:00.000-03:00",
+                "endTime": "2026-06-06T18:00:00.000-03:00",
+                "timelinePath": [{"point": "-34.6°, -58.4°", "time": "2026-06-06T16:30:00-03:00"}],
+            },
+            {
+                "startTime": "2026-06-06T16:59:00.000-03:00",
+                "endTime": "2026-06-06T17:59:00.000-03:00",
+                "startTimeTimezoneUtcOffsetMinutes": -180,
+                "endTimeTimezoneUtcOffsetMinutes": -180,
+                "visit": {
+                    "hierarchyLevel": 0,
+                    "probability": 0.9,
+                    "topCandidate": {
+                        "placeId": "place-cafe",
+                        "semanticType": "UNKNOWN",
+                        "probability": 0.8,
+                        "placeLocation": {"latLng": "-34.6037°, -58.3816°"},
+                    },
+                },
+            },
+            {
+                "startTime": "2026-06-06T18:00:00.000-03:00",
+                "endTime": "2026-06-06T18:10:00.000-03:00",
+                "activity": {
+                    "start": {"latLng": "-34.6037°, -58.3816°"},
+                    "end": {"latLng": "-34.6100°, -58.3900°"},
+                    "distanceMeters": 800.0,
+                    "probability": 0.95,
+                    "topCandidate": {"type": "WALKING", "probability": 0.9},
+                },
+            },
+            {
+                "startTime": "2026-06-07T10:00:00.000-03:00",
+                "endTime": "2026-06-07T11:00:00.000-03:00",
+                "visit": {
+                    "hierarchyLevel": 0,
+                    "probability": 0.7,
+                    "topCandidate": {
+                        "placeId": "place-cafe",
+                        "semanticType": "UNKNOWN",
+                        "placeLocation": {"latLng": "-34.6037°, -58.3816°"},
+                    },
+                },
+            },
+        ],
+        "rawSignals": [],
+        "userLocationProfile": {},
+    }
+
+
+@pytest.fixture
+def sample_export(tmp_path: Path) -> Path:
+    """Write the synthetic official Timeline export and return its path."""
+    path = tmp_path / "Timeline.json"
+    path.write_text(json.dumps(official_export_payload()), encoding="utf-8")
     return path
 
 
