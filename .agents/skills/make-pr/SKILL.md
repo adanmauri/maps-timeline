@@ -1,70 +1,66 @@
 ---
 name: make-pr
-description: Create a GitHub Pull Request for maps-timeline after quality checks ($ARGUMENTS optional issue link).
+description: Create pull requests with consistent title/body, correct base branch, and verified branch state. Use when the user asks to open a PR from the current branch.
 ---
 
 # Make Pull Request
 
-Create a PR for **maps-timeline** using the GitHub CLI (`gh`). Optional $ARGUMENTS:
-GitHub issue number or PR title hint.
+## Objective
 
-## When to use
+Open a pull request from the current branch: validate state, push, and create
+the PR. The body content is produced by the `write-pr` skill: this skill owns
+the **mechanics**, not the prose.
 
-Code changes are complete and ready for review. **Cancel PR creation** if any gate
-step fails.
+## Workflow
 
-## Steps
+1. Validate repository state:
+   - `git status --short --branch`
+   - Confirm current branch is not `main` and follows `feat/`, `fix/`, `docs/` or `chore/`.
+2. Confirm the gate passed on the final state of the branch: `make check` (see `AGENTS.md`,
+   Before you finish). If it fails, stop and fix it; never open the PR around a failing check.
+3. Understand PR scope:
+   - `git log --oneline origin/main...HEAD`
+   - `git diff --stat origin/main...HEAD`
+   - Nothing under `data/`, no official export, dump or screenshot in the diff.
+4. Ensure remote branch exists:
+   - If needed: `git push -u origin HEAD`
+5. Draft PR title:
+   - Format: `<type>(<scope>): <short outcome>`, e.g. `fix(parser): read unconfirmed visits`
+   - `!` after the scope when it breaks the raw JSONL, the CLI or the dataset columns.
+   - Reuse commit intent when possible.
+6. Get the PR body from the **`write-pr`** skill (it fills the repo template into
+   `pr-body.tmp`). If `write-pr` has not been run, run it first, do not draft
+   the body here.
+7. Create PR:
+   - `gh pr create --base main --head <branch> --title "<title>" --body-file pr-body.tmp`
+   - Or a GitHub MCP server if one is connected.
+8. Report outcome:
+   - PR URL
+   - base/head branches
+   - final title used
 
-1. **Run the quality gate** (requires `uv sync` / `.venv`):
+## Safety Rules
 
-   ```bash
-   make quality    # lint + type-check + security (bandit)
-   make test       # pytest, 100% coverage on maps_timeline/
-   ```
+- Never open PR from `main`.
+- Never force push unless explicitly requested.
+- Do not change git config.
+- If `gh` (or a GitHub MCP) is not authenticated, stop and ask the user to authenticate.
+- No tool attribution in the title or body (see `create-commit`).
 
-   Parser changes — also verify offline:
+## Body
 
-   ```bash
-   uv run maps-timeline parse-file dump_dia.xml
-   ```
+The PR body comes from the `write-pr` skill, which fills the repo template
+([`.github/PULL_REQUEST_TEMPLATE.md`](../../../.github/PULL_REQUEST_TEMPLATE.md))
+into `pr-body.tmp`. `gh pr create` also applies that template automatically when
+no body is passed.
 
-2. **Update branch with `main`**
+## Command Template
 
-   ```bash
-   git fetch origin main
-   git rebase origin/main
-   # resolve conflicts if any
-   git push --force-with-lease
-   ```
-
-3. **Branch name** — must match conventions (see `create-branch` skill):
-   `feat/…`, `fix/…`, `docs/…`, `chore/…`.
-
-4. **Draft description** — invoke the `write-pr` skill (or read
-   [`.agents/skills/write-pr/template`](../write-pr/template)). Save draft to
-   `data/drafts/PR.md` if useful.
-
-5. **Create the PR**
-
-   ```bash
-   mkdir -p data/drafts
-   gh pr create --title "<title>" --body-file data/drafts/PR.md
-   ```
-
-   Title examples:
-   - `fix(parser): handle missing transit mode`
-   - `feat(cli): add --jsonl flag to stats`
-   - `docs: expand troubleshooting section`
-
-   Link issues: `Fixes #42` in the body when applicable.
-
-## Best practices
-
-- **Conventional Commits** on branch commits:
-  - `feat: add scroll reset after day change`
-  - `fix: parse European distance decimals`
-  - `docs: document data/runs layout`
-  - `test: cover timeline_panel_collapsed`
-- Never commit `data/`, real XML dumps, or screenshots with locations.
-- Pre-commit hooks: `make install-dev` sets them up; they run on commit.
-- See [`docs/DEVELOPMENT.md`](../../../docs/DEVELOPMENT.md) for the full checklist.
+```bash
+git status --short --branch
+make check
+git log --oneline origin/main...HEAD
+git diff --stat origin/main...HEAD
+git push -u origin HEAD
+gh pr create --base main --head <branch> --title "<title>" --body-file pr-body.tmp
+```

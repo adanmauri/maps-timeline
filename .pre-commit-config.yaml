@@ -1,12 +1,17 @@
-# Pre-commit hooks for maps-timeline.
-# Install: make install-dev  (or pre-commit install && pre-commit install --hook-type pre-push)
-#
-# On commit: hygiene + auto-format (black, isort, ruff).
-# On push:    full quality gate (ruff, flake8, pylint, mypy, pyright, bandit) + pytest.
-# Mirrors:    make format (commit) · make quality + make test (pre-push) · CI workflows.
+# Local checks: the commit hook and `make lint` run this file. Install the hooks once with
+# `make setup`; pre-commit installs the Go and Node.js runtimes the hooks need if they are missing.
+# CI runs MegaLinter (.github/workflows/code-quality.yaml) with the same linters and settings
+# (docs/adr/0011):
+# - Python linters run from uv.lock, updated like any development dependency.
+# - Node.js and Go linters pin the image's version in additional_dependencies, and betterleaks,
+#   actionlint and zizmor keep it as their rev. Update them with MegaLinter.
+# There are no shell scripts, so MegaLinter's shell linters have nothing to check and no hook here.
+# The scanners that need the network or a vulnerability database run only in CI. Bump the other
+# revs with `pre-commit autoupdate` (pick releases at least two weeks old).
 
-default_language_version:
-  python: python3.13
+default_install_hook_types: [pre-commit, commit-msg]
+# Hooks check staged files; only no-tool-attribution, which says so, reads the commit message.
+default_stages: [pre-commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -16,51 +21,149 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml
-      - id: check-merge-conflict
       - id: check-added-large-files
-        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
       - id: detect-private-key
 
-  # make format — black (config: pyproject.toml [tool.black])
-  - repo: https://github.com/psf/black
-    rev: 26.1.0
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: v1.7.3
     hooks:
-      - id: black
-        args: [--config, pyproject.toml]
-        files: ^(maps_timeline|tests)/
+      - id: betterleaks
 
-  # make format — ruff check --fix (config: pyproject.toml [tool.ruff])
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.16
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.2
     hooks:
-      - id: ruff
-        args: [--fix, --config=pyproject.toml]
-        files: ^(maps_timeline|tests)/
+      - id: uv-lock
 
-  # make format — isort + pre-push gates (via uv / make)
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.25.0
+    hooks:
+      - id: zizmor
+        args: [--offline]
+
   - repo: local
     hooks:
+      - id: black
+        name: black
+        entry: uv run --locked black
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
       - id: isort
         name: isort
-        entry: uv run isort --settings-path pyproject.toml
+        entry: uv run --locked isort --filter-files
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-check
+        name: ruff
+        entry: uv run --locked ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: flake8
+        name: flake8
+        entry: uv run --locked flake8
         language: system
         types: [python]
-        files: ^(maps_timeline|tests)/
-
-      # make quality — lint + type-check + security
-      - id: make-quality
-        name: make quality
-        entry: make quality
+        require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run --locked mypy maps_timeline tests tooling
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pyright
+        name: pyright
+        entry: uv run --locked pyright maps_timeline tests tooling
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pylint
+        name: pylint
+        entry: uv run --locked pylint maps_timeline tests tooling
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: bandit
+        name: bandit
+        entry: uv run --locked bandit -q -r maps_timeline -c pyproject.toml
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: yamllint
+        name: yamllint
+        entry: uv run --locked yamllint --format standard -c .yamllint.yml
+        language: system
+        types: [yaml]
+      - id: prettier
+        name: prettier (JSON and YAML)
+        entry: prettier --write
+        language: node
+        additional_dependencies: [prettier@3.9.6]
+        types_or: [json, yaml]
+      - id: jsonlint
+        name: jsonlint
+        entry: jsonlint --quiet
+        language: node
+        additional_dependencies: ["@prantlf/jsonlint@17.0.1"]
+        types: [json]
+      - id: markdownlint
+        name: markdownlint
+        entry: markdownlint -c .markdownlint.json
+        language: node
+        additional_dependencies: [markdownlint-cli@0.49.1]
+        types: [markdown]
+      - id: markdown-table-formatter
+        name: markdown-table-formatter
+        entry: markdown-table-formatter
+        language: node
+        additional_dependencies: [markdown-table-formatter@1.7.0]
+        types: [markdown]
+      - id: cspell
+        name: cspell
+        entry: cspell --no-progress --no-summary --no-must-find-files --show-context
+        language: node
+        additional_dependencies: [cspell@10.1.1]
+        types: [text]
+      - id: secretlint
+        name: secretlint
+        entry: secretlint --secretlintrc .secretlintrc.json
+        language: node
+        additional_dependencies:
+          - secretlint@13.0.5
+          - "@secretlint/secretlint-rule-preset-recommend@13.0.5"
+        types: [text]
+        # secretlint skips its own config, and fails when that leaves it nothing to check.
+        exclude: ^\.secretlintrc\.json$
+      - id: jscpd
+        name: jscpd (copied code)
+        entry: jscpd --config .jscpd.json .
+        language: node
+        additional_dependencies: [jscpd@5.0.16]
+        types: [text]
+        pass_filenames: false
+      - id: check-agents
+        name: agent pointers in sync with .agents/
+        entry: uv run --no-project tooling/sync_agents.py --check
         language: system
         pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      # make test — pytest with 100% coverage on maps_timeline/
-      - id: make-test
-        name: make test
-        entry: make test
+        files: ^(\.agents/|\.claude/skills/|\.github/(skills|instructions)/|\.cursor/rules/|tooling/sync_agents\.py$)
+      - id: check-docs
+        name: docs links and ADR index
+        entry: uv run --no-project tooling/check_docs.py
         language: system
         pass_filenames: false
-        always_run: true
-        stages: [pre-push]
+        files: \.md$|^tooling/check_docs\.py$
+      - id: no-tool-attribution
+        name: no tool attribution in the commit message
+        entry: uv run --no-project tooling/check_commit_msg.py
+        language: system
+        stages: [commit-msg]

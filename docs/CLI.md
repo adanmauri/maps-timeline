@@ -38,20 +38,20 @@ printed every 25 days. **Ctrl+C or a device error stops the walk without losing 
 days captured so far are merged, and running the same command again continues where the
 plan left off.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `--days` | `3`, or planned | Number of days to step back from the displayed day. With `--export`, omit it to plan the walk |
-| `--raw-out` | *(auto)* | Folder for raw JSONL. Default: new `data/runs/<timestamp>/raw/` |
-| `--clean-out` | *(auto)* | Folder for CSV + Parquet. Default: matching run's `clean/` |
-| `--serial` | — | Device serial when multiple devices are connected |
-| `--prefer` | `u2` | Driver: `u2` (uiautomator2) or `adb` (raw ADB) |
-| `--on-error` | `skip` | On navigation error: `skip` the day or `abort` the run |
-| `--geocode` | `false` | Resolve addresses to lat/lon via Nominatim |
-| `--nominatim-email` | `anon@example.com` | Contact email in Nominatim User-Agent (used when `--geocode`) |
-| `--top` | `10` | How many top places to show in the summary |
-| `--export` | — | Official Timeline export to copy into the run (`raw/export.json`) and merge. Validated before scraping starts; without `--days` it plans the walk |
-| `--since` | no limit | Planned mode: only look for places visited on or after this day (`YYYY-MM-DD`); their older visits get the name too. Days the export does not reach are also limited to it. The plan line shows how many unnamed visits that names |
-| `--until` | today | Planned mode: only plan days on or before this day (`YYYY-MM-DD`). The walk still starts from the day shown in Maps, so newer days are stepped over (or open the Timeline on `--until` first, as the plan's tip says). Must not be before `--since` |
+| Option              | Default            | Description                                                                                                                                                                                                                                         |
+|---------------------|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--days`            | `3`, or planned    | Number of days to step back from the displayed day. With `--export`, omit it to plan the walk                                                                                                                                                       |
+| `--raw-out`         | *(auto)*           | Folder for raw JSONL. Default: new `data/runs/<timestamp>/raw/`                                                                                                                                                                                     |
+| `--clean-out`       | *(auto)*           | Folder for CSV + Parquet. Default: matching run's `clean/`                                                                                                                                                                                          |
+| `--serial`          | —                  | Device serial when multiple devices are connected                                                                                                                                                                                                   |
+| `--prefer`          | `u2`               | Driver: `u2` (uiautomator2) or `adb` (raw ADB)                                                                                                                                                                                                      |
+| `--on-error`        | `skip`             | On navigation error: `skip` the day or `abort` the run                                                                                                                                                                                              |
+| `--geocode`         | `false`            | Resolve addresses to lat/lon via Nominatim                                                                                                                                                                                                          |
+| `--nominatim-email` | `anon@example.com` | Contact email in Nominatim User-Agent (used when `--geocode`)                                                                                                                                                                                       |
+| `--top`             | `10`               | How many top places to show in the summary                                                                                                                                                                                                          |
+| `--export`          | —                  | Official Timeline export to copy into the run (`raw/export.json`) and merge. Validated before scraping starts; without `--days` it plans the walk                                                                                                   |
+| `--since`           | no limit           | Planned mode: only look for places visited on or after this day (`YYYY-MM-DD`); their older visits get the name too. Days the export does not reach are also limited to it. The plan line shows how many unnamed visits that names                  |
+| `--until`           | today              | Planned mode: only plan days on or before this day (`YYYY-MM-DD`). The walk still starts from the day shown in Maps, so newer days are stepped over (or open the Timeline on `--until` first, as the plan's tip says). Must not be before `--since` |
 
 **Phone required.** Open Google Maps → Rutas → Día before running. The device is
 connected before the run folder is created, so a missing phone leaves no empty run.
@@ -67,16 +67,16 @@ uv run maps-timeline scrape --days 30
 uv run maps-timeline scrape --export Timeline.json   # planned walk; merge later with normalize
 ```
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `--days` | `3`, or planned | Days to scrape backwards. With `--export`, omit it to plan the walk |
-| `--out` | *(auto)* | Output folder for JSONL. Default: `data/runs/<timestamp>/raw/` |
-| `--serial` | — | Device serial |
-| `--prefer` | `u2` | `u2` or `adb` |
-| `--on-error` | `skip` | `skip` or `abort` |
-| `--export` | — | Official Timeline export to copy into `<out>/export.json` for `normalize` to merge; without `--days` it plans the walk exactly like `run` |
-| `--since` | no limit | Planned mode: only look for places visited on or after this day (`YYYY-MM-DD`) |
-| `--until` | today | Planned mode: only plan days on or before this day (`YYYY-MM-DD`) |
+| Option       | Default         | Description                                                                                                                               |
+|--------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `--days`     | `3`, or planned | Days to scrape backwards. With `--export`, omit it to plan the walk                                                                       |
+| `--out`      | *(auto)*        | Output folder for JSONL. Default: `data/runs/<timestamp>/raw/`                                                                            |
+| `--serial`   | —               | Device serial                                                                                                                             |
+| `--prefer`   | `u2`            | `u2` or `adb`                                                                                                                             |
+| `--on-error` | `skip`          | `skip` or `abort`                                                                                                                         |
+| `--export`   | —               | Official Timeline export to copy into `<out>/export.json` for `normalize` to merge; without `--days` it plans the walk exactly like `run` |
+| `--since`    | no limit        | Planned mode: only look for places visited on or after this day (`YYYY-MM-DD`)                                                            |
+| `--until`    | today           | Planned mode: only plan days on or before this day (`YYYY-MM-DD`)                                                                         |
 
 **Output:** `<out>/timeline.jsonl` plus `<out>/debug/` on failures (including
 `{date}_error.txt` with the traceback when a device error stops the walk).
@@ -98,13 +98,13 @@ uv run maps-timeline normalize --geocode --nominatim-email you@example.com
 uv run maps-timeline normalize --jsonl run/raw/timeline.jsonl --export Timeline.json
 ```
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `--jsonl` | latest run | Path to input `timeline.jsonl` |
-| `--export` | `raw/export.json` if present | Official Timeline export to merge |
-| `--out` | inferred | Clean output folder (sibling `clean/` of the run's `raw/`) |
-| `--geocode` | `false` | Add `lat`/`lon` via Nominatim to rows that have none |
-| `--nominatim-email` | `anon@example.com` | Contact for Nominatim User-Agent |
+| Option              | Default                      | Description                                                |
+|---------------------|------------------------------|------------------------------------------------------------|
+| `--jsonl`           | latest run                   | Path to input `timeline.jsonl`                             |
+| `--export`          | `raw/export.json` if present | Official Timeline export to merge                          |
+| `--out`             | inferred                     | Clean output folder (sibling `clean/` of the run's `raw/`) |
+| `--geocode`         | `false`                      | Add `lat`/`lon` via Nominatim to rows that have none       |
+| `--nominatim-email` | `anon@example.com`           | Contact for Nominatim User-Agent                           |
 
 **Defaults:** reads `data/latest` → `<run>/raw/timeline.jsonl` and
 `<run>/raw/export.json` (whichever exist), writes to `<run>/clean/`. Passing only
@@ -124,10 +124,10 @@ uv run maps-timeline import Timeline.json                          # new run
 uv run maps-timeline import Timeline.json --run "$(cat data/latest)"  # merge with a scrape
 ```
 
-| Argument / option | Default | Description |
-| --- | --- | --- |
-| `path` | *(required)* | Export saved from *Settings → Location → Location services → Timeline → Export Timeline data* |
-| `--run` | new run | Existing run folder to attach the export to; its scrape (if any) wins over other runs' captures of the same day |
+| Argument / option | Default      | Description                                                                                                     |
+|-------------------|--------------|-----------------------------------------------------------------------------------------------------------------|
+| `path`            | *(required)* | Export saved from *Settings → Location → Location services → Timeline → Export Timeline data*                   |
+| `--run`           | new run      | Existing run folder to attach the export to; its scrape (if any) wins over other runs' captures of the same day |
 
 The file is validated before any run is created or modified, copied verbatim to
 `<run>/raw/export.json`, and `data/latest` is pointed at the run. The scrapes of every run
@@ -145,10 +145,10 @@ uv run maps-timeline stats
 uv run maps-timeline stats --top 20
 ```
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `--source` | latest run | Path to `.parquet` or `.csv` |
-| `--top` | `10` | Number of most-visited places to list |
+| Option     | Default    | Description                           |
+|------------|------------|---------------------------------------|
+| `--source` | latest run | Path to `.parquet` or `.csv`          |
+| `--top`    | `10`       | Number of most-visited places to list |
 
 The summary includes date range, total distance and travel time, activity modes,
 busiest day, top places, and count of segments needing user action.
@@ -164,10 +164,10 @@ uv run maps-timeline parse-file dump_dia.xml
 uv run maps-timeline parse-file dump.xml --day 2026-06-06
 ```
 
-| Argument / option | Required | Description |
-| --- | --- | --- |
-| `path` | yes | Path to XML dump |
-| `--day` | no | Override date (`YYYY-MM-DD`). Default: parse from header |
+| Argument / option | Required | Description                                              |
+|-------------------|----------|----------------------------------------------------------|
+| `path`            | yes      | Path to XML dump                                         |
+| `--day`           | no       | Override date (`YYYY-MM-DD`). Default: parse from header |
 
 Prints the full `DayTimeline` JSON and a one-line segment/summary check.
 
@@ -181,11 +181,11 @@ Capture a single accessibility dump of the current screen. **Phone required.**
 uv run maps-timeline dump --out dump.xml
 ```
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `--out` | `dump.xml` | Output file path |
-| `--serial` | — | Device serial |
-| `--prefer` | `u2` | `u2` or `adb` |
+| Option     | Default    | Description      |
+|------------|------------|------------------|
+| `--out`    | `dump.xml` | Output file path |
+| `--serial` | —          | Device serial    |
+| `--prefer` | `u2`       | `u2` or `adb`    |
 
 Useful for calibrating selectors and building offline test fixtures.
 
@@ -196,24 +196,23 @@ Useful for calibrating selectors and building offline test fixtures.
 The [Makefile](../Makefile) wraps common invocations:
 
 ```bash
-make install-dev              # uv sync + pre-commit hooks
 make scrape ARGS="--days 7"
 make normalize ARGS="--geocode --nominatim-email you@example.com"
-make parse-file FILE=dump_dia.xml
+make parse-file FILE=dump.xml
 make dump OUT=dump.xml
-make quality && make test     # lint + type-check + security; then pytest
+make run ARGS="stats --top 20"
 ```
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for all `make` targets.
+`make help` lists every target; the development ones are in [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ---
 
 ## Exit codes
 
-| Code | Meaning |
-| --- | --- |
-| `0` | Success |
-| `1` | Missing input files, dataset not found, unsupported Timeline export, `--since` after `--until`, or typer validation error |
+| Code | Meaning                                                                                                                   |
+|------|---------------------------------------------------------------------------------------------------------------------------|
+| `0`  | Success                                                                                                                   |
+| `1`  | Missing input files, dataset not found, unsupported Timeline export, `--since` after `--until`, or typer validation error |
 
 Scrape may complete with partial success (`days_failed` listed in output) when
 `--on-error skip` and individual days fail navigation. A walk stopped by Ctrl+C or a

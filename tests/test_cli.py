@@ -44,6 +44,55 @@ def fixed_today(monkeypatch) -> date:
     return TODAY
 
 
+@pytest.fixture(name="geocoder_kwargs")
+def fixture_geocoder_kwargs(monkeypatch) -> list[dict[str, object]]:
+    """Replace the Nominatim geocoder with a fake; return the arguments each one was built with."""
+    created: list[dict[str, object]] = []
+
+    class FakeGeocoder:
+        """Record constructor kwargs for the CLI geocode path."""
+
+        def __init__(self, **kwargs):
+            """Store initialization kwargs for assertions."""
+            created.append(kwargs)
+
+        def geocode(self, _address: str | None) -> tuple[float | None, float | None]:
+            """Return a fixed coordinate pair."""
+            return (1.0, 2.0)
+
+        def close(self) -> None:
+            """No-op close hook for pylint public-method parity."""
+
+    monkeypatch.setattr("maps_timeline.geocode.NominatimGeocoder", FakeGeocoder)
+    return created
+
+
+def _fake_device(monkeypatch) -> None:
+    """Replace the driver factory with a healthy fake device."""
+    monkeypatch.setattr(
+        "maps_timeline.device.make_driver",
+        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
+    )
+
+
+def _fake_scrape(
+    monkeypatch,
+    output_path: Path | None = None,
+    days_scraped: int = 1,
+    days_failed: list[str] | None = None,
+) -> None:
+    """Fake the device and a scrape that wrote `output_path` (default: in the run's raw folder)."""
+    _fake_device(monkeypatch)
+    monkeypatch.setattr(
+        "maps_timeline.pipeline.scrape",
+        lambda *args, **kwargs: ScrapeResult(
+            days_scraped=days_scraped,
+            days_failed=days_failed or [],
+            output_path=output_path or kwargs["out_dir"] / "timeline.jsonl",
+        ),
+    )
+
+
 def test_cli_help():
     """Expose all commands in --help output."""
     result = runner.invoke(app, ["--help"])
@@ -131,25 +180,9 @@ def test_normalize_command(sample_jsonl, tmp_path: Path):
     assert (out / "timeline.csv").exists()
 
 
-def test_normalize_with_geocode_flag(sample_jsonl, tmp_path: Path, monkeypatch):
+def test_normalize_with_geocode_flag(sample_jsonl, tmp_path: Path, geocoder_kwargs):
     """Initialize a geocoder when --geocode is passed."""
-    created: list[object] = []
 
-    class FakeGeocoder:
-        """Record constructor kwargs for the CLI geocode path."""
-
-        def __init__(self, **kwargs):
-            """Store initialization kwargs for assertions."""
-            created.append(kwargs)
-
-        def geocode(self, _address: str | None) -> tuple[float | None, float | None]:
-            """Return a fixed coordinate pair."""
-            return (1.0, 2.0)
-
-        def close(self) -> None:
-            """No-op close hook for pylint public-method parity."""
-
-    monkeypatch.setattr("maps_timeline.geocode.NominatimGeocoder", FakeGeocoder)
     out = tmp_path / "clean"
     result = runner.invoke(
         app,
@@ -165,25 +198,14 @@ def test_normalize_with_geocode_flag(sample_jsonl, tmp_path: Path, monkeypatch):
         ],
     )
     assert result.exit_code == 0
-    assert created
+    assert geocoder_kwargs[0]["user_agent"] == "maps-timeline/0.1 (me@example.com)"
 
 
 def test_run_command(monkeypatch, tmp_path: Path, sample_jsonl: Path):
     """Run scrape, normalize, and stats in one invocation."""
     raw = tmp_path / "raw"
     clean = tmp_path / "clean"
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=1,
-            days_failed=[],
-            output_path=sample_jsonl,
-        ),
-    )
+    _fake_scrape(monkeypatch, sample_jsonl)
     result = runner.invoke(
         app,
         ["run", "--days", "1", "--raw-out", str(raw), "--clean-out", str(clean)],
@@ -199,10 +221,7 @@ def test_run_command(monkeypatch, tmp_path: Path, sample_jsonl: Path):
 @pytest.mark.usefixtures("isolated_paths")
 def test_run_command_versioned_run(monkeypatch, sample_jsonl: Path):
     """Create one versioned export run when run output flags are omitted."""
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
+    _fake_device(monkeypatch)
 
     def fake_scrape(_driver, today, n_days, out_dir, **kwargs):
         """Write through to the requested raw folder and return its JSONL path."""
@@ -223,18 +242,7 @@ def test_run_command_legacy_raw_out(monkeypatch, tmp_path: Path, sample_jsonl: P
     """Infer clean/ from an explicit legacy raw output folder."""
     raw = tmp_path / "raw"
     clean = tmp_path / "clean"
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=1,
-            days_failed=[],
-            output_path=sample_jsonl,
-        ),
-    )
+    _fake_scrape(monkeypatch, sample_jsonl)
     result = runner.invoke(
         app, ["run", "--days", "1", "--raw-out", str(raw), "--clean-out", str(clean)]
     )
@@ -242,39 +250,12 @@ def test_run_command_legacy_raw_out(monkeypatch, tmp_path: Path, sample_jsonl: P
     assert (clean / "timeline.csv").exists()
 
 
-def test_run_command_with_geocode(monkeypatch, tmp_path: Path, sample_jsonl: Path):
+def test_run_command_with_geocode(monkeypatch, tmp_path: Path, sample_jsonl: Path, geocoder_kwargs):
     """Initialize a geocoder in the combined run command."""
     raw = tmp_path / "raw"
     clean = tmp_path / "clean"
-    created: list[object] = []
 
-    class FakeGeocoder:
-        """Record constructor kwargs for the CLI geocode path."""
-
-        def __init__(self, **kwargs):
-            """Store initialization kwargs for assertions."""
-            created.append(kwargs)
-
-        def geocode(self, _address: str | None) -> tuple[float | None, float | None]:
-            """Return a fixed coordinate pair."""
-            return (1.0, 2.0)
-
-        def close(self) -> None:
-            """No-op close hook for pylint public-method parity."""
-
-    monkeypatch.setattr("maps_timeline.geocode.NominatimGeocoder", FakeGeocoder)
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=1,
-            days_failed=[],
-            output_path=sample_jsonl,
-        ),
-    )
+    _fake_scrape(monkeypatch, sample_jsonl)
     result = runner.invoke(
         app,
         [
@@ -291,7 +272,7 @@ def test_run_command_with_geocode(monkeypatch, tmp_path: Path, sample_jsonl: Pat
         ],
     )
     assert result.exit_code == 0
-    assert created
+    assert geocoder_kwargs[0]["user_agent"] == "maps-timeline/0.1 (me@example.com)"
 
 
 def test_run_command_falls_back_to_csv_for_stats(monkeypatch, tmp_path: Path, sample_jsonl: Path):
@@ -300,18 +281,7 @@ def test_run_command_falls_back_to_csv_for_stats(monkeypatch, tmp_path: Path, sa
     clean = tmp_path / "clean"
     csv_path = clean / "timeline.csv"
     clean.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=1,
-            days_failed=[],
-            output_path=sample_jsonl,
-        ),
-    )
+    _fake_scrape(monkeypatch, sample_jsonl)
     monkeypatch.setattr("maps_timeline.merge.build_dataset", lambda *args, **kwargs: csv_path)
     pd.DataFrame(
         [{"day": "2026-06-06", "type": "activity", "title": "Walk", "duration_min": 5.0}]
@@ -326,17 +296,8 @@ def test_run_command_falls_back_to_csv_for_stats(monkeypatch, tmp_path: Path, sa
 
 def test_scrape_command(monkeypatch, tmp_path: Path):
     """Wire scrape through mocked driver and pipeline dependencies."""
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=2,
-            days_failed=["2026-06-09"],
-            output_path=tmp_path / "timeline.jsonl",
-        ),
+    _fake_scrape(
+        monkeypatch, tmp_path / "timeline.jsonl", days_scraped=2, days_failed=["2026-06-09"]
     )
     result = runner.invoke(app, ["scrape", "--days", "2", "--out", str(tmp_path)])
     assert result.exit_code == 0
@@ -347,18 +308,7 @@ def test_scrape_command(monkeypatch, tmp_path: Path):
 @pytest.mark.usefixtures("isolated_paths")
 def test_scrape_command_versioned_run(monkeypatch):
     """Create a versioned export run when scrape --out is omitted."""
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=1,
-            days_failed=[],
-            output_path=kwargs["out_dir"] / "timeline.jsonl",
-        ),
-    )
+    _fake_scrape(monkeypatch)
     result = runner.invoke(app, ["scrape", "--days", "1"])
     assert result.exit_code == 0
     assert "Export run:" in result.stdout
@@ -371,18 +321,7 @@ def test_run_command_infers_clean_from_raw_out(monkeypatch, tmp_path: Path, samp
     raw.mkdir(parents=True)
     jsonl = raw / "timeline.jsonl"
     jsonl.write_text(sample_jsonl.read_text(encoding="utf-8"), encoding="utf-8")
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=1,
-            days_failed=[],
-            output_path=jsonl,
-        ),
-    )
+    _fake_scrape(monkeypatch, jsonl)
     result = runner.invoke(app, ["run", "--days", "1", "--raw-out", str(raw)])
     assert result.exit_code == 0
     assert (run_dir / "clean" / "timeline.csv").exists()
@@ -507,16 +446,7 @@ def test_run_command_with_export(
     monkeypatch, tmp_path: Path, sample_jsonl: Path, sample_export: Path
 ):
     """Copy the export next to the scraped JSONL and merge both."""
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
-    monkeypatch.setattr(
-        "maps_timeline.pipeline.scrape",
-        lambda *args, **kwargs: ScrapeResult(
-            days_scraped=1, days_failed=[], output_path=sample_jsonl
-        ),
-    )
+    _fake_scrape(monkeypatch, sample_jsonl)
     clean = tmp_path / "clean"
     result = runner.invoke(
         app,
@@ -554,10 +484,7 @@ def test_run_command_rejects_invalid_export_before_scraping(monkeypatch, tmp_pat
 def _fake_scrape_recorder(monkeypatch, output_path: Path, stopped: str | None = None) -> list[dict]:
     """Stub the device and record the arguments the scrape is called with."""
     calls: list[dict] = []
-    monkeypatch.setattr(
-        "maps_timeline.device.make_driver",
-        lambda **kwargs: MagicMock(dump=lambda: "<hierarchy/>", is_healthy=lambda: True),
-    )
+    _fake_device(monkeypatch)
 
     def fake_scrape(_driver, **kwargs):
         """Record kwargs and pretend the planned days were captured."""

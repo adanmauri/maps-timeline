@@ -2,10 +2,12 @@
 
 This document describes the on-disk artifacts produced by `maps-timeline`.
 All paths under `data/` are **gitignored** and contain sensitive location history.
+The commands that write them are in [`CLI.md`](CLI.md), and how they are produced in
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Run layout
 
-```
+```text
 data/
 ├── latest                    # single line: absolute path to latest run dir
 ├── cache/
@@ -37,37 +39,37 @@ One **JSON object per line**, one line per scraped day. Produced by `scrape` /
 
 ### Top-level fields (`DayTimeline`)
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `day` | `YYYY-MM-DD` | Calendar date for this Timeline day |
+| Field         | Type           | Description                                      |
+|---------------|----------------|--------------------------------------------------|
+| `day`         | `YYYY-MM-DD`   | Calendar date for this Timeline day              |
 | `header_text` | string \| null | Date header exactly as shown ("Sat Jun 6, 2026") |
-| `summary` | object | On-screen day totals (see below) |
-| `segments` | array | Ordered list of Timeline entries |
-| `scraped_at` | ISO datetime | When this day was captured |
+| `summary`     | object         | On-screen day totals (see below)                 |
+| `segments`    | array          | Ordered list of Timeline entries                 |
+| `scraped_at`  | ISO datetime   | When this day was captured                       |
 
 ### `summary` object (`DaySummary`)
 
-| Field | Type | Example |
-| --- | --- | --- |
-| `total_distance_text` | string \| null | `"18 km"` |
+| Field                 | Type           | Example        |
+|-----------------------|----------------|----------------|
+| `total_distance_text` | string \| null | `"18 km"`      |
 | `total_duration_text` | string \| null | `"1 h 15 min"` |
-| `visit_count` | int \| null | `5` |
+| `visit_count`         | int \| null    | `5`            |
 
 ### `segments[]` object (`Segment`)
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `type` | string | See [segment types](#segment-types) |
-| `title` | string \| null | Place name or transport mode |
-| `address` | string \| null | Street address when present |
-| `time_anchor` | string \| null | `range`, `departure`, `arrival`, `all_day` |
-| `start_time` | string \| null | Raw clock text, e.g. `"4:49 PM"` |
-| `end_time` | string \| null | Raw clock text |
-| `duration_text` | string \| null | e.g. `"10 min"`, `"1 h 15 min"` |
-| `distance_text` | string \| null | e.g. `"2,4 km"`, `"850 m"` |
-| `confirmed` | bool \| null | `false` for unconfirmed visits |
-| `needs_user_action` | bool | `true` when Google could not resolve the segment |
-| `raw_desc` | string | Full `content-desc` for traceability |
+| Field               | Type           | Description                                      |
+|---------------------|----------------|--------------------------------------------------|
+| `type`              | string         | See [segment types](#segment-types)              |
+| `title`             | string \| null | Place name or transport mode                     |
+| `address`           | string \| null | Street address when present                      |
+| `time_anchor`       | string \| null | `range`, `departure`, `arrival`, `all_day`       |
+| `start_time`        | string \| null | Raw clock text, e.g. `"4:49 PM"`                 |
+| `end_time`          | string \| null | Raw clock text                                   |
+| `duration_text`     | string \| null | e.g. `"10 min"`, `"1 h 15 min"`                  |
+| `distance_text`     | string \| null | e.g. `"2,4 km"`, `"850 m"`                       |
+| `confirmed`         | bool \| null   | `false` for unconfirmed visits                   |
+| `needs_user_action` | bool           | `true` when Google could not resolve the segment |
+| `raw_desc`          | string         | Full `content-desc` for traceability             |
 
 ### Example line (abbreviated)
 
@@ -100,13 +102,13 @@ One **JSON object per line**, one line per scraped day. Produced by `scrape` /
 
 ### Segment types
 
-| `type` | UI meaning | `needs_user_action` |
-| --- | --- | --- |
-| `place_visit` | Confirmed place visit | `false` |
-| `activity` | Trip leg (car, walk, transit, …) | `false` |
-| `unconfirmed_visit` | `"¿Visitaste …?"` prompt | `true` |
-| `unknown_visit` | `"Visita desconocida"` | `true` |
-| `missing_transit` | `"Modo de viaje faltante"` | `true` |
+| `type`              | UI meaning                       | `needs_user_action` |
+|---------------------|----------------------------------|---------------------|
+| `place_visit`       | Confirmed place visit            | `false`             |
+| `activity`          | Trip leg (car, walk, transit, …) | `false`             |
+| `unconfirmed_visit` | `"¿Visitaste …?"` prompt         | `true`              |
+| `unknown_visit`     | `"Visita desconocida"`           | `true`              |
+| `missing_transit`   | `"Modo de viaje faltante"`       | `true`              |
 
 Visit counting for summary cross-check includes `place_visit`, `unconfirmed_visit`,
 and `unknown_visit` (see `DayTimeline.place_visits`).
@@ -119,14 +121,14 @@ The file Android writes from *Settings → Location → Location services → Ti
 Export Timeline data* (often localized, e.g. `Rutas.json`). `import` and `run --export`
 copy it **verbatim** into `raw/export.json`; it is the second raw input of stage 2.
 
-| Top-level key | Read? | Contents |
-| --- | :---: | --- |
-| `semanticSegments[].visit` | Yes | `topCandidate.placeId`, `semanticType`, `placeLocation.latLng`, `probability`, `hierarchyLevel` |
-| `semanticSegments[].activity` | Yes | `topCandidate.type` (e.g. `WALKING`), `distanceMeters`, `start`/`end` `latLng` |
-| `semanticSegments[].timelinePath` | No | GPS points along the day |
-| `semanticSegments[].timelineMemory` | No | Trip summaries |
-| `rawSignals` | No | Raw GPS fixes, activity recognition, **Wi-Fi scans** |
-| `userLocationProfile` | No | Frequent places (home/work), travel-mode affinities |
+| Top-level key                       | Read? | Contents                                                                                        |
+|-------------------------------------|:-----:|-------------------------------------------------------------------------------------------------|
+| `semanticSegments[].visit`          |  Yes  | `topCandidate.placeId`, `semanticType`, `placeLocation.latLng`, `probability`, `hierarchyLevel` |
+| `semanticSegments[].activity`       |  Yes  | `topCandidate.type` (e.g. `WALKING`), `distanceMeters`, `start`/`end` `latLng`                  |
+| `semanticSegments[].timelinePath`   |  No   | GPS points along the day                                                                        |
+| `semanticSegments[].timelineMemory` |  No   | Trip summaries                                                                                  |
+| `rawSignals`                        |  No   | Raw GPS fixes, activity recognition, **Wi-Fi scans**                                            |
+| `userLocationProfile`               |  No   | Frequent places (home/work), travel-mode affinities                                             |
 
 Timestamps are ISO 8601 with UTC offset (`2026-06-06T16:59:00.000-03:00`); coordinates
 are strings like `"-34.6037°, -58.3816°"`. The export has **no place names or
@@ -139,30 +141,30 @@ supported.
 
 Produced by `normalize`. **One row per segment** (not per day).
 
-| Column | Type | Source |
-| --- | --- | --- |
-| `day` | string | `YYYY-MM-DD` |
-| `type` | string | Segment type |
-| `title` | string \| null | Place name or mode |
-| `address` | string \| null | Address text |
-| `start_iso` | string \| null | ISO 8601 from `day` + `start_time` |
-| `end_iso` | string \| null | ISO 8601 from `day` + `end_time` |
-| `duration_min` | float \| null | Parsed from `duration_text` |
-| `distance_km` | float \| null | Parsed from `distance_text` (meters → km) |
-| `confirmed` | bool \| null | As scraped |
-| `needs_user_action` | bool | As scraped |
-| `lat` | float \| null | Only with `--geocode` |
-| `lon` | float \| null | Only with `--geocode` |
+| Column              | Type           | Source                                    |
+|---------------------|----------------|-------------------------------------------|
+| `day`               | string         | `YYYY-MM-DD`                              |
+| `type`              | string         | Segment type                              |
+| `title`             | string \| null | Place name or mode                        |
+| `address`           | string \| null | Address text                              |
+| `start_iso`         | string \| null | ISO 8601 from `day` + `start_time`        |
+| `end_iso`           | string \| null | ISO 8601 from `day` + `end_time`          |
+| `duration_min`      | float \| null  | Parsed from `duration_text`               |
+| `distance_km`       | float \| null  | Parsed from `distance_text` (meters → km) |
+| `confirmed`         | bool \| null   | As scraped                                |
+| `needs_user_action` | bool           | As scraped                                |
+| `lat`               | float \| null  | Only with `--geocode`                     |
+| `lon`               | float \| null  | Only with `--geocode`                     |
 
 ### Parsing rules (normalization)
 
-| Raw text | Parsed value |
-| --- | --- |
-| `"1 h 15 min"` | `duration_min = 75` |
-| `"42 min"` | `duration_min = 42` |
-| `"2,4 km"` | `distance_km = 2.4` (European decimal comma) |
-| `"850 m"` | `distance_km = 0.85` |
-| `"4:59 PM"` on day `2026-06-06` | `start_iso = 2026-06-06T16:59:00` |
+| Raw text                        | Parsed value                                 |
+|---------------------------------|----------------------------------------------|
+| `"1 h 15 min"`                  | `duration_min = 75`                          |
+| `"42 min"`                      | `duration_min = 42`                          |
+| `"2,4 km"`                      | `distance_km = 2.4` (European decimal comma) |
+| `"850 m"`                       | `distance_km = 0.85`                         |
+| `"4:59 PM"` on day `2026-06-06` | `start_iso = 2026-06-06T16:59:00`            |
 
 Times use 12-hour format with AM/PM as shown in the Maps UI.
 
@@ -173,22 +175,22 @@ trip**, plus one row per scraped entry that matched none. The scraped side is th
 scrape history (see below), not only the run's own JSONL. Columns above keep their
 meaning, with these differences and additions:
 
-| Column | Type | Source |
-| --- | --- | --- |
-| `start_iso` / `end_iso` | string | Local wall-clock time from the export (seconds precision) |
-| `duration_min` | float | Elapsed time from the export — **visits included** (stay length) |
-| `distance_km` | float \| null | `distanceMeters` from the export, else the UI text |
-| `lat` / `lon` | float \| null | Visit place location (`--geocode` only fills rows without it) |
-| `start_lat` / `start_lon` / `end_lat` / `end_lon` | float \| null | Trip endpoints |
-| `place_id` | string \| null | Google place ID of the visit |
-| `semantic_type` | string \| null | `UNKNOWN`, `INFERRED_HOME`, `INFERRED_WORK`, `SEARCHED_ADDRESS`, … |
-| `probability` | float \| null | Google's confidence in the visit / activity |
-| `hierarchy_level` | int \| null | `0` top-level visit, `1` visit nested inside another |
-| `activity_type` | string \| null | `WALKING`, `IN_PASSENGER_VEHICLE`, `IN_BUS`, `FLYING`, … |
-| `tz_offset_min` | int \| null | UTC offset of the start time, in minutes |
-| `source` | string | `both` (matched), `export` (official only), `scrape` (UI only) |
-| `title_source` | string \| null | `scrape`, `place_id` (learned from another visit to the same place, in this or an earlier run), `activity_type` (label learned from another trip of that type), `export` (raw activity type) |
-| `match_score` | float \| null | Time overlap (intersection over union) with the matched scraped entry |
+| Column                                            | Type           | Source                                                                                                                                                                                       |
+|---------------------------------------------------|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `start_iso` / `end_iso`                           | string         | Local wall-clock time from the export (seconds precision)                                                                                                                                    |
+| `duration_min`                                    | float          | Elapsed time from the export — **visits included** (stay length)                                                                                                                             |
+| `distance_km`                                     | float \| null  | `distanceMeters` from the export, else the UI text                                                                                                                                           |
+| `lat` / `lon`                                     | float \| null  | Visit place location (`--geocode` only fills rows without it)                                                                                                                                |
+| `start_lat` / `start_lon` / `end_lat` / `end_lon` | float \| null  | Trip endpoints                                                                                                                                                                               |
+| `place_id`                                        | string \| null | Google place ID of the visit                                                                                                                                                                 |
+| `semantic_type`                                   | string \| null | `UNKNOWN`, `INFERRED_HOME`, `INFERRED_WORK`, `SEARCHED_ADDRESS`, …                                                                                                                           |
+| `probability`                                     | float \| null  | Google's confidence in the visit / activity                                                                                                                                                  |
+| `hierarchy_level`                                 | int \| null    | `0` top-level visit, `1` visit nested inside another                                                                                                                                         |
+| `activity_type`                                   | string \| null | `WALKING`, `IN_PASSENGER_VEHICLE`, `IN_BUS`, `FLYING`, …                                                                                                                                     |
+| `tz_offset_min`                                   | int \| null    | UTC offset of the start time, in minutes                                                                                                                                                     |
+| `source`                                          | string         | `both` (matched), `export` (official only), `scrape` (UI only)                                                                                                                               |
+| `title_source`                                    | string \| null | `scrape`, `place_id` (learned from another visit to the same place, in this or an earlier run), `activity_type` (label learned from another trip of that type), `export` (raw activity type) |
+| `match_score`                                     | float \| null  | Time overlap (intersection over union) with the matched scraped entry                                                                                                                        |
 
 **How entries are matched:** per scraped day, each entry is paired with the official
 segment of the same kind (visit ↔ `place_visit` / `unconfirmed_visit` / `unknown_visit`;
@@ -261,13 +263,13 @@ When `--geocode` is passed to `normalize` or `run`:
 Written during scraping when validation fails. Files are named
 `{YYYY-MM-DD}_{tag}.xml` and `.png` (`.txt` for `error`):
 
-| Tag | Trigger |
-| --- | --- |
-| `wrong_screen` | Timeline day list not detected |
-| `collapsed_panel` | Bottom sheet still collapsed |
-| `empty` | Parser found 0 segments but summary shows visits |
-| `no_prev_button` | "Día anterior" button not found (screenshot only) |
-| `error` | Device, adb or app error stopped the walk (traceback only; the date is the day being left or read) |
+| Tag               | Trigger                                                                                            |
+|-------------------|----------------------------------------------------------------------------------------------------|
+| `wrong_screen`    | Timeline day list not detected                                                                     |
+| `collapsed_panel` | Bottom sheet still collapsed                                                                       |
+| `empty`           | Parser found 0 segments but summary shows visits                                                   |
+| `no_prev_button`  | "Día anterior" button not found (screenshot only)                                                  |
+| `error`           | Device, adb or app error stopped the walk (traceback only; the date is the day being left or read) |
 
 Use these with `parse-file` to reproduce parser issues offline.
 

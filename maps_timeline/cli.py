@@ -64,6 +64,26 @@ _UNTIL_HELP = (
     "Default: today."
 )
 
+# Options shared by several commands.
+_Days = Annotated[int | None, typer.Option(help=_DAYS_HELP)]
+_Serial = Annotated[str | None, typer.Option(help="Device serial (if more than one is connected).")]
+_Prefer = Annotated[str, typer.Option(help="Preferred driver: 'u2' or 'adb'.")]
+_OnError = Annotated[str, typer.Option(help="On navigation error: 'skip' or 'abort'.")]
+_Since = Annotated[datetime | None, typer.Option(help=_SINCE_HELP, formats=["%Y-%m-%d"])]
+_Until = Annotated[datetime | None, typer.Option(help=_UNTIL_HELP, formats=["%Y-%m-%d"])]
+_Geocode = Annotated[
+    bool, typer.Option(help="Add lat/lon by resolving addresses via Nominatim (OpenStreetMap).")
+]
+_NominatimEmail = Annotated[
+    str | None,
+    typer.Option(
+        help=(
+            "Contact email included in Nominatim HTTP requests when --geocode is set. "
+            "No signup required; Nominatim may use it to reach you about usage issues."
+        ),
+    ),
+]
+
 
 def _date_window(
     since: datetime | None, until: datetime | None, today: date
@@ -131,7 +151,7 @@ def _continue_hint(result: ScrapeResult, plan: ScrapePlan | None) -> None:
 
 @app.command()
 def scrape(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
-    days: Annotated[int | None, typer.Option(help=_DAYS_HELP)] = None,
+    days: _Days = None,
     out: Annotated[
         Path | None,
         typer.Option(
@@ -141,11 +161,9 @@ def scrape(  # pylint: disable=too-many-arguments,too-many-positional-arguments,
             ),
         ),
     ] = None,
-    serial: Annotated[
-        str | None, typer.Option(help="Device serial (if more than one is connected).")
-    ] = None,
-    prefer: Annotated[str, typer.Option(help="Preferred driver: 'u2' or 'adb'.")] = "u2",
-    on_error: Annotated[str, typer.Option(help="On navigation error: 'skip' or 'abort'.")] = "skip",
+    serial: _Serial = None,
+    prefer: _Prefer = "u2",
+    on_error: _OnError = "skip",
     export: Annotated[
         Path | None,
         typer.Option(
@@ -157,8 +175,8 @@ def scrape(  # pylint: disable=too-many-arguments,too-many-positional-arguments,
             dir_okay=False,
         ),
     ] = None,
-    since: Annotated[datetime | None, typer.Option(help=_SINCE_HELP, formats=["%Y-%m-%d"])] = None,
-    until: Annotated[datetime | None, typer.Option(help=_UNTIL_HELP, formats=["%Y-%m-%d"])] = None,
+    since: _Since = None,
+    until: _Until = None,
 ):
     """Walk the Timeline day by day and save each day as one JSONL line."""
     from .device import make_driver  # pylint: disable=import-outside-toplevel
@@ -215,19 +233,8 @@ def normalize(
             ),
         ),
     ] = None,
-    geocode: Annotated[
-        bool,
-        typer.Option(help="Add lat/lon by resolving addresses via Nominatim (OpenStreetMap)."),
-    ] = False,
-    nominatim_email: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "Contact email included in Nominatim HTTP requests when --geocode is set. "
-                "No signup required; Nominatim may use it to reach you about usage issues."
-            ),
-        ),
-    ] = None,
+    geocode: _Geocode = False,
+    nominatim_email: _NominatimEmail = None,
 ):
     """Convert the raw JSONL and/or official export into a clean dataset (CSV + Parquet)."""
     from .merge import build_dataset  # pylint: disable=import-outside-toplevel
@@ -287,7 +294,7 @@ def stats(
 
 @app.command()
 def run(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
-    days: Annotated[int | None, typer.Option(help=_DAYS_HELP)] = None,
+    days: _Days = None,
     raw_out: Annotated[
         Path | None,
         typer.Option(
@@ -303,24 +310,11 @@ def run(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too
             help="Output folder for CSV + Parquet. Defaults to the same versioned run as raw.",
         ),
     ] = None,
-    serial: Annotated[
-        str | None, typer.Option(help="Device serial (if more than one is connected).")
-    ] = None,
-    prefer: Annotated[str, typer.Option(help="Preferred driver: 'u2' or 'adb'.")] = "u2",
-    on_error: Annotated[str, typer.Option(help="On navigation error: 'skip' or 'abort'.")] = "skip",
-    geocode: Annotated[
-        bool,
-        typer.Option(help="Add lat/lon by resolving addresses via Nominatim (OpenStreetMap)."),
-    ] = False,
-    nominatim_email: Annotated[
-        str | None,
-        typer.Option(
-            help=(
-                "Contact email included in Nominatim HTTP requests when --geocode is set. "
-                "No signup required; Nominatim may use it to reach you about usage issues."
-            ),
-        ),
-    ] = None,
+    serial: _Serial = None,
+    prefer: _Prefer = "u2",
+    on_error: _OnError = "skip",
+    geocode: _Geocode = False,
+    nominatim_email: _NominatimEmail = None,
     top: Annotated[int, typer.Option(help="How many of the most visited places to show.")] = 10,
     export: Annotated[
         Path | None,
@@ -333,8 +327,8 @@ def run(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too
             dir_okay=False,
         ),
     ] = None,
-    since: Annotated[datetime | None, typer.Option(help=_SINCE_HELP, formats=["%Y-%m-%d"])] = None,
-    until: Annotated[datetime | None, typer.Option(help=_UNTIL_HELP, formats=["%Y-%m-%d"])] = None,
+    since: _Since = None,
+    until: _Until = None,
 ):
     """Scrape the Timeline, normalize to CSV/Parquet, and print a summary."""
     from .device import make_driver  # pylint: disable=import-outside-toplevel
@@ -499,8 +493,8 @@ def read_header_text_safe(xml: str) -> str | None:
 @app.command()
 def dump(
     out: Annotated[Path, typer.Option(help="Where to save the dump.")] = Path("dump.xml"),
-    serial: Annotated[str | None, typer.Option(help="Device serial.")] = None,
-    prefer: Annotated[str, typer.Option(help="Preferred driver: 'u2' or 'adb'.")] = "u2",
+    serial: _Serial = None,
+    prefer: _Prefer = "u2",
 ):
     """Take a single dump of the current screen and save it (to calibrate selectors)."""
     from .device import make_driver  # pylint: disable=import-outside-toplevel

@@ -102,7 +102,7 @@ class OfficialSegment(BaseModel):
     lat: float | None = None  # visits: place location
     lon: float | None = None
     activity_type: str | None = None  # activities: WALKING, IN_PASSENGER_VEHICLE, ...
-    distance_m: float | None = None  # activities: travelled distance
+    distance_m: float | None = None  # activities: distance traveled
     start_lat: float | None = None  # activities: start point
     start_lon: float | None = None
     end_lat: float | None = None  # activities: end point

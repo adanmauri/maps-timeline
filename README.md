@@ -1,27 +1,31 @@
+<!-- markdownlint-disable-file MD041 -->
 <div align="center">
 
 # maps-timeline
 
-### Recover your Google Maps Timeline — straight from your Android phone
+<h3>Recover your Google Maps Timeline, straight from your Android phone.</h3>
 
+<!-- Usage: the Python it needs, where it runs, what it reads from, and its license. -->
 [![Python](https://img.shields.io/badge/Python-3.13+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![uv](https://img.shields.io/badge/uv-managed-7C3AED?style=flat-square)](https://docs.astral.sh/uv/)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-374151?style=flat-square)](#prerequisites)
-[![Android](https://img.shields.io/badge/Android-device-3DDC84?style=flat-square&logo=android&logoColor=black)](#prerequisites)
+[![Android](https://img.shields.io/badge/Android-ADB-3DDC84?style=flat-square&logo=android&logoColor=white)](#prerequisites)
 [![License](https://img.shields.io/badge/License-MIT-525252?style=flat-square&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
 ---
 
+<!-- Quality: the workflows on main, the coverage gate the tests enforce, Dependabot and TODOs. -->
 [![tests](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/tests.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=tests)](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml)
-[![quality](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/quality.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=quality)](https://github.com/adanmauri/maps-timeline/actions/workflows/quality.yml)
+[![quality](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/code-quality.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=quality)](https://github.com/adanmauri/maps-timeline/actions/workflows/code-quality.yaml)
 [![security](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/security.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=security)](https://github.com/adanmauri/maps-timeline/actions/workflows/security.yaml)
 [![coverage](https://img.shields.io/badge/coverage-100%25-22C55E?style=flat-square&logo=pytest&logoColor=white)](https://github.com/adanmauri/maps-timeline/actions/workflows/tests.yaml)
+[![dependabot](https://img.shields.io/badge/dependabot-enabled-025E8C?style=flat-square&logo=dependabot&logoColor=white)](.github/dependabot.yaml)
+[![todo](https://img.shields.io/github/actions/workflow/status/adanmauri/maps-timeline/todo-to-issue.yaml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=todo)](https://github.com/adanmauri/maps-timeline/actions/workflows/todo-to-issue.yaml)
 
 ---
 
-Extract your Google Maps location history (**Timeline**) **directly from the app UI**
-on a physical Android device via **ADB** and the Android accessibility tree — and merge
-it with the phone's official Timeline export to get place names *and* coordinates.
+Extract your Google Maps location history (**Timeline**) **directly from the app UI** on a
+physical Android device via **ADB** and the Android accessibility tree, and merge it with the
+phone's official Timeline export to get place names *and* coordinates.
 
 No Google API. No Takeout. Your data stays on devices you control.
 
@@ -69,16 +73,16 @@ scraped.
 
 ## Features
 
-| | |
-| --- | --- |
-| **Two-stage pipeline** | Raw scrape (JSONL) decoupled from normalization — reprocess without re-scanning the phone |
-| **Official export merge** | Import Android's Timeline export (coordinates, place IDs) and merge it with the scrape (names, addresses) |
+|                            |                                                                                                               |
+|----------------------------|---------------------------------------------------------------------------------------------------------------|
+| **Two-stage pipeline**     | Raw scrape (JSONL) decoupled from normalization — reprocess without re-scanning the phone                     |
+| **Official export merge**  | Import Android's Timeline export (coordinates, place IDs) and merge it with the scrape (names, addresses)     |
 | **Export-driven scraping** | The export decides which days to capture: only days that show still-unnamed places; the rest are stepped over |
-| **Versioned exports** | Each run lands in `data/runs/<timestamp>/` with a `data/latest` pointer |
-| **Offline parser tests** | `parse-file` works on saved XML dumps — no device required |
-| **Optional geocoding** | Resolve addresses to lat/lon via Nominatim (OpenStreetMap), cached locally |
-| **Resilient scraping** | Skips or aborts on navigation errors; saves debug XML + PNG on failures |
-| **100% test coverage** | Pure parsing layer tested against synthetic and real UI dumps |
+| **Versioned exports**      | Each run lands in `data/runs/<timestamp>/` with a `data/latest` pointer                                       |
+| **Offline parser tests**   | `parse-file` works on saved XML dumps — no device required                                                    |
+| **Optional geocoding**     | Resolve addresses to lat/lon via Nominatim (OpenStreetMap), cached locally                                    |
+| **Resilient scraping**     | Skips or aborts on navigation errors; saves debug XML + PNG on failures                                       |
+| **100% test coverage**     | Pure parsing layer tested against synthetic and real UI dumps                                                 |
 
 <p align="right">(<a href="#table-of-contents">back to top</a>)</p>
 
@@ -119,15 +123,14 @@ Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Tech stack
 
-| Layer | Tools |
-| --- | --- |
-| **Runtime** | Python 3.13+, [uv](https://docs.astral.sh/uv/) |
-| **CLI** | [Typer](https://typer.tiangolo.com/) |
-| **Data** | [pandas](https://pandas.pydata.org/), [PyArrow](https://arrow.apache.org/docs/python/) |
-| **Models** | [Pydantic](https://docs.pydantic.dev/) |
-| **Device** | ADB, [uiautomator2](https://github.com/openatx/uiautomator2) |
-| **Geocoding** | [Nominatim](https://nominatim.org/) (optional) |
-| **Quality** | pytest (100% coverage), ruff, mypy, pyright, pylint, bandit |
+| Layer         | Tools                                                                                  |
+|---------------|----------------------------------------------------------------------------------------|
+| **Runtime**   | Python 3.13+, [uv](https://docs.astral.sh/uv/)                                         |
+| **CLI**       | [Typer](https://typer.tiangolo.com/)                                                   |
+| **Data**      | [pandas](https://pandas.pydata.org/), [PyArrow](https://arrow.apache.org/docs/python/) |
+| **Models**    | [Pydantic](https://docs.pydantic.dev/)                                                 |
+| **Device**    | ADB, [uiautomator2](https://github.com/openatx/uiautomator2)                           |
+| **Geocoding** | [Nominatim](https://nominatim.org/) (optional)                                         |
 
 <p align="right">(<a href="#table-of-contents">back to top</a>)</p>
 
@@ -137,11 +140,11 @@ Deep dive: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 **Computer** (macOS, Windows, or Linux)
 
-| Requirement | macOS | Windows | Linux |
-| --- | --- | --- | --- |
-| **Python 3.13+** | Installed by `uv tool` if needed | [python.org](https://www.python.org/downloads/) or `winget install Python.Python.3.13` | Installed by `uv tool` if needed, or your distro / [python.org](https://www.python.org/downloads/) |
-| **[uv](https://docs.astral.sh/uv/)** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"` | Same install script as macOS |
-| **ADB** | `brew install android-platform-tools` | [Platform-tools](https://developer.android.com/tools/releases/platform-tools) zip → add folder to `PATH` | e.g. `sudo apt install adb` (Debian/Ubuntu) or your distro's `android-tools` package |
+| Requirement                          | macOS                                              | Windows                                                                                                  | Linux                                                                                              |
+|--------------------------------------|----------------------------------------------------|----------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| **Python 3.13+**                     | Installed by `uv tool` if needed                   | [python.org](https://www.python.org/downloads/) or `winget install Python.Python.3.13`                   | Installed by `uv tool` if needed, or your distro / [python.org](https://www.python.org/downloads/) |
+| **[uv](https://docs.astral.sh/uv/)** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`                    | Same install script as macOS                                                                       |
+| **ADB**                              | `brew install android-platform-tools`              | [Platform-tools](https://developer.android.com/tools/releases/platform-tools) zip → add folder to `PATH` | e.g. `sudo apt install adb` (Debian/Ubuntu) or your distro's `android-tools` package               |
 
 After installing ADB, confirm it is on your `PATH`: `adb version`.
 
@@ -175,14 +178,9 @@ maps-timeline --help
 pip install git+https://github.com/adanmauri/maps-timeline.git
 ```
 
-**From a GitHub release** ([Releases](https://github.com/adanmauri/maps-timeline/releases)):
-
-```bash
-pip install https://github.com/adanmauri/maps-timeline/releases/download/v0.1.0/maps_timeline-0.1.0-py3-none-any.whl
-```
-
-> Not published on PyPI yet. Requires **Python 3.13+** unless you use `uv tool install`.
-
+> Not published on PyPI or as a GitHub release yet. Requires **Python 3.13+** unless you use
+> `uv tool install`.
+>
 > The first scrape may install a small uiautomator2 helper app on the phone. This is expected.
 
 ### Development install
@@ -192,11 +190,11 @@ Clone the repo if you plan to change the code or run the test suite:
 ```bash
 git clone https://github.com/adanmauri/maps-timeline.git
 cd maps-timeline
-uv sync                              # creates .venv and installs the package in editable mode
+make setup                           # creates .venv and installs the git hooks (needs uv)
 uv run maps-timeline --help
 ```
 
-See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for `make quality`, tests, and pre-commit hooks.
+See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for `make check`, the tests and the hooks.
 
 ### Prepare Google Maps
 
@@ -287,15 +285,15 @@ export is copied verbatim into the run (`raw/export.json`); delete stray copies 
 Examples below use the `maps-timeline` command (tool install). With the development
 install, prefix with `uv run`.
 
-| Command | Phone? | What it does |
-| --- | :---: | --- |
-| `run` | Yes | Scrape → normalize → print summary |
-| `scrape` | Yes | Walk the Timeline backwards (optionally planned by `--export`), write raw JSONL |
-| `normalize` | No | JSONL and/or official export (plus earlier runs' scrapes) → CSV + Parquet |
-| `import` | No | Copy the official Timeline export into a run and build the dataset |
-| `stats` | No | Console summary of the clean dataset |
-| `parse-file` | No | Offline parser test on a saved XML dump |
-| `dump` | Yes | Save one screen dump (debug selectors) |
+| Command      | Phone? | What it does                                                                    |
+|--------------|:------:|---------------------------------------------------------------------------------|
+| `run`        |  Yes   | Scrape → normalize → print summary                                              |
+| `scrape`     |  Yes   | Walk the Timeline backwards (optionally planned by `--export`), write raw JSONL |
+| `normalize`  |   No   | JSONL and/or official export (plus earlier runs' scrapes) → CSV + Parquet       |
+| `import`     |   No   | Copy the official Timeline export into a run and build the dataset              |
+| `stats`      |   No   | Console summary of the clean dataset                                            |
+| `parse-file` |   No   | Offline parser test on a saved XML dump                                         |
+| `dump`       |  Yes   | Save one screen dump (debug selectors)                                          |
 
 Full option reference: [`docs/CLI.md`](docs/CLI.md).
 
@@ -345,7 +343,7 @@ Details: [`docs/DATA.md`](docs/DATA.md#geocoding).
 
 Sensitive exports live under `data/`, which is **gitignored**.
 
-```
+```text
 data/
 ├── latest                          # text file → path of the most recent run
 ├── cache/
@@ -364,17 +362,17 @@ data/
 
 ### Clean dataset columns
 
-| Column | Description |
-| --- | --- |
-| `day` | `YYYY-MM-DD` |
-| `type` | `place_visit`, `activity`, `unconfirmed_visit`, `unknown_visit`, `missing_transit` |
-| `title` | Place name or transport mode (e.g. driving) |
-| `address` | Street address when shown |
-| `start_iso` / `end_iso` | Parsed clock times as ISO 8601 |
-| `duration_min` / `distance_km` | Numeric trip stats |
-| `confirmed` | `false` for unconfirmed visits |
-| `needs_user_action` | `true` when Google could not fully resolve the segment |
-| `lat` / `lon` | From the official export (visits), or from `--geocode` |
+| Column                         | Description                                                                        |
+|--------------------------------|------------------------------------------------------------------------------------|
+| `day`                          | `YYYY-MM-DD`                                                                       |
+| `type`                         | `place_visit`, `activity`, `unconfirmed_visit`, `unknown_visit`, `missing_transit` |
+| `title`                        | Place name or transport mode (e.g. driving)                                        |
+| `address`                      | Street address when shown                                                          |
+| `start_iso` / `end_iso`        | Parsed clock times as ISO 8601                                                     |
+| `duration_min` / `distance_km` | Numeric trip stats                                                                 |
+| `confirmed`                    | `false` for unconfirmed visits                                                     |
+| `needs_user_action`            | `true` when Google could not fully resolve the segment                             |
+| `lat` / `lon`                  | From the official export (visits), or from `--geocode`                             |
 
 With the official export the dataset has **one row per official visit or trip** plus any
 scraped entries that matched none (from this run and every earlier run), and adds `place_id`, `semantic_type`, `probability`,
@@ -411,22 +409,22 @@ from the `lat`/`lon` columns.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | What to do |
-| --- | --- | --- |
-| `adb devices` shows nothing | Cable, driver, or debugging off | Re-plug USB, accept the prompt, try another cable |
-| `No export runs found` | Never scraped, or `data/` deleted | Run `scrape`, `run` or `import` first |
-| `Unsupported Timeline export` | Takeout file or a non-Android export | Use the phone export: *Settings → Location → Timeline → Export Timeline data* |
-| No "Export Timeline data" option | Timeline off, outdated Maps / Play services, staged rollout | Turn Timeline on in Maps, update both apps, search "Timeline" in Settings |
-| `Timeline 'Day' view is not visible` | Wrong Maps screen | Open **Timeline → Day** on the start day |
-| `activity list is collapsed` | Bottom sheet shows map only | Swipe the sheet up; scraper also tries to expand it |
-| `Expected date X but app shows Y` | Header drift / wrong start day | Re-open Maps on the intended day and retry |
-| `Could not find 'Previous day' button` | UI change or wrong language | Save a `dump`, check `content-desc` for the prev-day button |
-| `Walk stopped early` | Ctrl+C, cable, adb or app error mid-walk | Captured days are kept and merged; run the same command again. Errors leave a traceback in `raw/debug/{date}_error.txt` |
-| `planned days are newer than ...` | Maps opened on an older day than the plan needs | Open the Timeline on the day the message names, then retry |
-| `Skipping N unnamed places` | The app does not show them (e.g. nested visits) or their visits do not match | Nothing to do; they keep their coordinates and place ID |
-| `0 segments but summary shows N visits` | Parser mismatch | Check `raw/debug/` XML; file an issue with an anonymized dump |
-| uiautomator2 connection fails | Helper app not installed | Retry; or use `--prefer adb` |
-| Geocoding is slow | Many unique addresses | Normal — cached after first run; ~1 addr/sec |
+| Symptom                                 | Likely cause                                                                 | What to do                                                                                                              |
+|-----------------------------------------|------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| `adb devices` shows nothing             | Cable, driver, or debugging off                                              | Re-plug USB, accept the prompt, try another cable                                                                       |
+| `No export runs found`                  | Never scraped, or `data/` deleted                                            | Run `scrape`, `run` or `import` first                                                                                   |
+| `Unsupported Timeline export`           | Takeout file or a non-Android export                                         | Use the phone export: *Settings → Location → Timeline → Export Timeline data*                                           |
+| No "Export Timeline data" option        | Timeline off, outdated Maps / Play services, staged rollout                  | Turn Timeline on in Maps, update both apps, search "Timeline" in Settings                                               |
+| `Timeline 'Day' view is not visible`    | Wrong Maps screen                                                            | Open **Timeline → Day** on the start day                                                                                |
+| `activity list is collapsed`            | Bottom sheet shows map only                                                  | Swipe the sheet up; scraper also tries to expand it                                                                     |
+| `Expected date X but app shows Y`       | Header drift / wrong start day                                               | Re-open Maps on the intended day and retry                                                                              |
+| `Could not find 'Previous day' button`  | UI change or wrong language                                                  | Save a `dump`, check `content-desc` for the prev-day button                                                             |
+| `Walk stopped early`                    | Ctrl+C, cable, adb or app error mid-walk                                     | Captured days are kept and merged; run the same command again. Errors leave a traceback in `raw/debug/{date}_error.txt` |
+| `planned days are newer than ...`       | Maps opened on an older day than the plan needs                              | Open the Timeline on the day the message names, then retry                                                              |
+| `Skipping N unnamed places`             | The app does not show them (e.g. nested visits) or their visits do not match | Nothing to do; they keep their coordinates and place ID                                                                 |
+| `0 segments but summary shows N visits` | Parser mismatch                                                              | Check `raw/debug/` XML; file an issue with an anonymized dump                                                           |
+| uiautomator2 connection fails           | Helper app not installed                                                     | Retry; or use `--prefer adb`                                                                                            |
+| Geocoding is slow                       | Many unique addresses                                                        | Normal — cached after first run; ~1 addr/sec                                                                            |
 
 Debug artifacts: `<run>/raw/debug/{date}_{tag}.xml` and `.png`.
 
@@ -450,33 +448,33 @@ lookups when you pass `--geocode`).
 
 ## Contributing
 
-Contributions are welcome. The highest-impact changes are usually **anonymized XML dumps**
-that expose parser edge cases and **offline tests** that lock the behavior in.
+Contributions are welcome. The highest-impact changes are usually **parser edge cases** shown
+with an anonymized or synthetic dump, and **offline tests** that lock the behavior in.
 
 ```bash
-uv sync                    # or make install-dev for pre-commit hooks
-make quality && make test  # lint, types, security, then tests (100% coverage)
-uv run maps-timeline parse-file dump_dia.xml
+make setup                                   # environment and git hooks (needs uv)
+make check                                   # every hook, then the tests on Python 3.14 and 3.13
+uv run maps-timeline parse-file my_dump.xml  # offline check of a saved (anonymized) dump
 ```
 
-1. Respect layer boundaries — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-2. Open a PR or file a device bug with environment details (Maps version, resolution, OEM skin).
-3. Never attach real location data — anonymize dumps first.
-
-Full guide: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) · Agent skills: [`.agents/skills/`](.agents/skills/).
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first. Never attach real location data: anonymize
+dumps before they leave your machine.
 
 <p align="right">(<a href="#table-of-contents">back to top</a>)</p>
 
 ## Documentation
 
-| Document | Audience | Contents |
-| --- | --- | --- |
-| **This README** | Everyone | Motivation, quick start, workflows, troubleshooting |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Contributors | Layers, scraping loop, UI findings, reliability |
-| [`docs/CLI.md`](docs/CLI.md) | Users | Full command and option reference |
-| [`docs/DATA.md`](docs/DATA.md) | Analysts | JSONL / CSV / Parquet schemas |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Contributors | Dev setup, `make` targets, testing, PR workflow |
-| [`AGENTS.md`](AGENTS.md) | AI agents | Coding standards and guardrails |
+| Document                                       | Audience     | Contents                                                      |
+|------------------------------------------------|--------------|---------------------------------------------------------------|
+| **This README**                                | Everyone     | Motivation, quick start, workflows, troubleshooting           |
+| [`docs/CLI.md`](docs/CLI.md)                   | Users        | Every command and option                                      |
+| [`docs/DATA.md`](docs/DATA.md)                 | Analysts     | Raw JSONL, official export, CSV and Parquet schemas           |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Contributors | Layers, the walk, UI findings, the merge and the planner      |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)   | Contributors | Setup, `make` targets, conventions, testing, releasing        |
+| [`docs/CI.md`](docs/CI.md)                     | Contributors | Which check runs where, locally and in CI, and why            |
+| [`docs/adr/`](docs/adr/README.md)              | Contributors | The decisions behind the design, and their trade-offs         |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md)           | Contributors | How to report issues and send pull requests                   |
+| [`AGENTS.md`](AGENTS.md)                       | AI agents    | Operating guidelines, boundaries, and the rules in `.agents/` |
 
 <p align="right">(<a href="#table-of-contents">back to top</a>)</p>
 
