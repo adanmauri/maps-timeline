@@ -1,41 +1,33 @@
 ---
 name: create-branch
-description: Create a Git branch for maps-timeline work from a GitHub issue or short description ($ARGUMENTS).
+description: Create a branch for maps-timeline work from a GitHub issue or a short description, from an up-to-date main. Use when starting a bug fix, feature, docs or chore change.
 ---
 
 # Create Branch
 
-Create a local Git branch for work on **maps-timeline**. You provide a GitHub issue
-number/URL or a short description ($ARGUMENTS). The branch name follows this repo's
-conventions and is created from an up-to-date `main`.
+## Objective
 
-## When to use
+Create a local branch from an up-to-date `main`, named after the issue or the change.
 
-Starting work on a bug, parser improvement, or feature. Ensure the working tree is
-clean (or stash changes) before branching.
+## Workflow
 
-## Steps
-
-1. **Resolve context from $ARGUMENTS**
+1. Resolve the context from the request:
    - GitHub issue: `42` or `https://github.com/adanmauri/maps-timeline/issues/42`
-   - Plain text: use as the slug source (e.g. `parser-missing-transit`)
+     (`gh issue view 42` for its title).
+   - Plain text: use it as the slug source (e.g. `parser-missing-transit`).
+2. Build the branch name:
 
-2. **Build the branch name**
+   | Kind    | Pattern        | Example                          |
+   |---------|----------------|----------------------------------|
+   | Feature | `feat/<slug>`  | `feat/parser-unconfirmed-visits` |
+   | Bug fix | `fix/<slug>`   | `fix/nav-date-drift`             |
+   | Docs    | `docs/<slug>`  | `docs/cli-reference`             |
+   | Chore   | `chore/<slug>` | `chore/bump-pandas`              |
 
-   | Kind | Pattern | Example |
-   | --- | --- | --- |
-   | Feature | `feat/<slug>` | `feat/parser-unconfirmed-visits` |
-   | Bug fix | `fix/<slug>` | `fix/nav-date-drift` |
-   | Docs | `docs/<slug>` | `docs/cli-reference` |
-   | Chore | `chore/<slug>` | `chore/bump-pandas` |
-
-   Optional prefix when a GitHub issue exists:
-   - `feat/42-parser-unconfirmed-visits`
-   - `fix/42-nav-date-drift`
-
-   Slug rules: lowercase, hyphens, alphanumerics only, 3–5 words from the title.
-
-3. **Create the branch**
+   With an issue, prefix its number: `fix/42-nav-date-drift`. Slug: lowercase, hyphens,
+   alphanumerics only, 3 to 5 words from the title.
+3. Check the working tree is clean (`git status --short`); if not, ask before stashing.
+4. Create the branch:
 
    ```bash
    git fetch origin main
@@ -44,16 +36,9 @@ clean (or stash changes) before branching.
    git checkout -b <branch-name>
    ```
 
-4. **Push (optional)**
+5. Report the branch name. Push only when the user asks (`make-pr` pushes when it opens the PR).
 
-   ```bash
-   git push -u origin <branch-name>
-   ```
+## Rules
 
-## Project notes
-
-- Personal OSS CLI tool — prefer **short-lived branches** merged to `main`.
-- Parser changes should be testable offline (`parse-file` on saved dumps).
-- See [`AGENTS.md`](../../../AGENTS.md) and [`docs/DEVELOPMENT.md`](../../../docs/DEVELOPMENT.md).
-
-If $ARGUMENTS cannot be resolved, ask the user for an issue link or slug.
+- Short-lived branches, merged to `main` through a pull request; never commit to `main`.
+- If the request names neither an issue nor a change, ask for one.

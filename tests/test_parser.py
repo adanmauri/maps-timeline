@@ -40,18 +40,18 @@ def test_parse_activity():
 
 def test_parse_place_visit_with_range():
     """Parse a confirmed place visit with title, address, and time range."""
-    seg = parse_segment("R&b cafe, De 4:59 PM a 6:36 PM, CJP, C. 4 366, B1902 La Plata")
+    seg = parse_segment("Cafe Ejemplo, De 4:59 PM a 6:36 PM, Centro, C. 7 120, B1900 Villa Ejemplo")
     assert seg is not None
     assert seg.type is SegmentType.PLACE_VISIT
-    assert seg.title == "R&b cafe"
-    assert seg.address == "CJP, C. 4 366, B1902 La Plata"
+    assert seg.title == "Cafe Ejemplo"
+    assert seg.address == "Centro, C. 7 120, B1900 Villa Ejemplo"
     assert seg.confirmed is True
 
 
 def test_parse_departure_and_arrival():
     """Parse first/last point anchors for departure and arrival times."""
-    dep = parse_segment("C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell")
-    arr = parse_segment("C. 29 5450, Hora de llegada: 9:38 PM, C. 29 5450, B1902 City Bell")
+    dep = parse_segment("C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo")
+    arr = parse_segment("C. 12 3456, Hora de llegada: 9:38 PM, C. 12 3456, B1900 Villa Ejemplo")
     assert dep is not None and dep.time_anchor is TimeAnchor.DEPARTURE
     assert dep.start_time == "4:08 PM" and dep.end_time is None
     assert arr is not None and arr.time_anchor is TimeAnchor.ARRIVAL
@@ -60,12 +60,10 @@ def test_parse_departure_and_arrival():
 
 def test_parse_unconfirmed_visit():
     """Parse an unconfirmed visit prompt and mark it as needing user action."""
-    seg = parse_segment(
-        "¿Visitaste Facultad de Informática - UNLP?, De 4:39 PM a 4:49 PM, Calle 50"
-    )
+    seg = parse_segment("¿Visitaste Biblioteca Central?, De 4:39 PM a 4:49 PM, Calle 10")
     assert seg is not None
     assert seg.type is SegmentType.UNCONFIRMED_VISIT
-    assert seg.title == "Facultad de Informática - UNLP"
+    assert seg.title == "Biblioteca Central"
     assert seg.confirmed is False
     assert seg.needs_user_action is True
 
@@ -73,14 +71,13 @@ def test_parse_unconfirmed_visit():
 def test_parse_all_day_home_visit():
     """Parse a whole-day stay when Google shows 'Todo el día' instead of clock times."""
     seg = parse_segment(
-        "¿Visitaste C. 29 5450?, Todo el día, C. 29 5450, B1902 City Bell, "
-        "Provincia de Buenos Aires"
+        "¿Visitaste C. 12 3456?, Todo el día, C. 12 3456, B1900 Villa Ejemplo, Provincia Ejemplo"
     )
     assert seg is not None
     assert seg.type is SegmentType.UNCONFIRMED_VISIT
     assert seg.time_anchor is TimeAnchor.ALL_DAY
-    assert seg.title == "C. 29 5450"
-    assert seg.address == "C. 29 5450, B1902 City Bell, Provincia de Buenos Aires"
+    assert seg.title == "C. 12 3456"
+    assert seg.address == "C. 12 3456, B1900 Villa Ejemplo, Provincia Ejemplo"
     assert seg.start_time is None and seg.end_time is None
     assert seg.confirmed is False
     assert seg.needs_user_action is True
@@ -91,13 +88,13 @@ def test_parse_jun3_debug_dump():
     dump = day_dump_xml(
         text_xml("Wed Jun 3, 2026"),
         text_xml("1 visitas"),
-        button_xml("C. 29 5450, Todo el día, C. 29 5450, B1902 City Bell"),
+        button_xml("C. 12 3456, Todo el día, C. 12 3456, B1900 Villa Ejemplo"),
         button_xml("Día anterior", clickable=True),
     )
     day = parse_day(dump, date(2026, 6, 3))
     assert day.summary.visit_count == 1
     assert len(day.segments) == 1
-    assert day.segments[0].title == "C. 29 5450"
+    assert day.segments[0].title == "C. 12 3456"
     assert day.segments[0].time_anchor is TimeAnchor.ALL_DAY
     assert day.summary_matches() is True
 
@@ -114,7 +111,7 @@ def test_action_buttons_are_ignored():
     """Ignore navigation and confirmation buttons that are not Timeline data."""
     assert parse_segment("Más opciones") is None
     assert parse_segment("Día anterior") is None
-    assert parse_segment("Sí, Facultad de Informática - UNLP, De 4:39 PM a 4:49 PM") is None
+    assert parse_segment("Sí, Biblioteca Central, De 4:39 PM a 4:49 PM") is None
 
 
 def _button(desc: str) -> str:
@@ -134,9 +131,9 @@ def test_parse_day_orders_and_summarizes():
         + _text("Sat Jun 6, 2026")
         + _text("18 km")
         + _text("5 visitas")
-        + _button("C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo")
         + _button("En automóvil, 10 min, 2,4 km, De 4:49 PM a 4:59 PM")
-        + _button("R&amp;b cafe, De 4:59 PM a 6:36 PM, CJP, C. 4 366")
+        + _button("Cafe Ejemplo, De 4:59 PM a 6:36 PM, Centro, C. 7 120")
         + _button("Más opciones")
         + "</hierarchy>"
     )
@@ -263,7 +260,7 @@ def test_count_timeline_segments():
     """Count only parseable Timeline buttons, ignoring chrome actions."""
     xml = (
         "<hierarchy>"
-        + _button("C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo")
         + _button("En automóvil, 10 min, 2,4 km, De 4:49 PM a 4:59 PM")
         + _button("Más opciones")
         + "</hierarchy>"
@@ -275,13 +272,13 @@ def test_timeline_anchor_flags_detects_home_endpoints():
     """Detect departure and arrival anchors for a round-trip day."""
     with_both = (
         "<hierarchy>"
-        + _button("C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell")
-        + _button("C. 29 5450, Hora de llegada: 9:38 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo")
+        + _button("C. 12 3456, Hora de llegada: 9:38 PM, C. 12 3456, B1900 Villa Ejemplo")
         + "</hierarchy>"
     )
     without_arrival = (
         "<hierarchy>"
-        + _button("C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo")
         + _button("En automóvil, 42 min, 13 km, De 8:55 PM a 9:38 PM")
         + "</hierarchy>"
     )
@@ -293,16 +290,16 @@ def test_is_richer_timeline_dump_prefers_arrival_at_equal_count():
     """Prefer a snapshot that includes the return-home arrival when counts match."""
     without_arrival = (
         "<hierarchy>"
-        + _button("C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo")
         + _button("En automóvil, 42 min, 13 km, De 8:55 PM a 9:38 PM")
-        + _button("R&amp;b cafe, De 4:59 PM a 6:36 PM, CJP, C. 4 366, B1902 La Plata")
+        + _button("Cafe Ejemplo, De 4:59 PM a 6:36 PM, Centro, C. 7 120, B1900 Villa Ejemplo")
         + "</hierarchy>"
     )
     with_arrival = (
         "<hierarchy>"
         + _button("En automóvil, 42 min, 13 km, De 8:55 PM a 9:38 PM")
-        + _button("R&amp;b cafe, De 4:59 PM a 6:36 PM, CJP, C. 4 366, B1902 La Plata")
-        + _button("C. 29 5450, Hora de llegada: 9:38 PM, C. 29 5450, B1902 City Bell")
+        + _button("Cafe Ejemplo, De 4:59 PM a 6:36 PM, Centro, C. 7 120, B1900 Villa Ejemplo")
+        + _button("C. 12 3456, Hora de llegada: 9:38 PM, C. 12 3456, B1900 Villa Ejemplo")
         + "</hierarchy>"
     )
     assert count_timeline_segments(without_arrival) == count_timeline_segments(with_arrival)
@@ -321,7 +318,7 @@ def test_is_richer_timeline_dump_prefers_more_segments():
     longer = (
         "<hierarchy>"
         + _button("En automóvil, 10 min, 2,4 km, De 4:49 PM a 4:59 PM")
-        + _button("C. 29 5450, Hora de llegada: 9:38 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de llegada: 9:38 PM, C. 12 3456, B1900 Villa Ejemplo")
         + "</hierarchy>"
     )
     assert is_richer_timeline_dump(longer, shorter) is True
@@ -334,11 +331,11 @@ def test_parse_round_trip_day_includes_arrival():
         "<hierarchy>"
         + _text("Sun Jun 7, 2026")
         + _text("3 visitas")
-        + _button("C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo")
         + _button("En automóvil, 26 min, 10 km, De 1:49 PM a 2:15 PM")
-        + _button("¿Visitaste C. 12 630?, De 2:15 PM a 7:57 PM, C. 12 630, La Plata")
+        + _button("¿Visitaste C. 9 210?, De 2:15 PM a 7:57 PM, C. 9 210, Villa Ejemplo")
         + _button("En automóvil, 21 min, 9,8 km, De 7:57 PM a 8:18 PM")
-        + _button("C. 29 5450, Hora de llegada: 8:18 PM, C. 29 5450, B1902 City Bell")
+        + _button("C. 12 3456, Hora de llegada: 8:18 PM, C. 12 3456, B1900 Villa Ejemplo")
         + "</hierarchy>"
     )
     day = parse_day(xml, date(2026, 6, 7))

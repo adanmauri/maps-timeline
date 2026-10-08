@@ -13,6 +13,26 @@ from maps_timeline.waits import (
 from tests.conftest import MinimalDriver, button_xml, day_dump_xml, patch_instant_waits, text_xml
 
 
+class _RevealDriver(MinimalDriver):
+    """Show `before` until the first list swipe, then `after`; count the swipes."""
+
+    def __init__(self, before: str, after: str) -> None:
+        self.before = before
+        self.after = after
+        self.swipes = 0
+
+    def dump(self) -> str:
+        """Return what the list shows after the swipes so far."""
+        return self.after if self.swipes else self.before
+
+    def swipe(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
+    ) -> None:
+        """Count one list swipe."""
+        del x1, y1, x2, y2, duration_ms
+        self.swipes += 1
+
+
 def test_wait_for_stable_screen_returns_matching_dump():
     """Return immediately when two consecutive dumps are identical."""
     xml = "<hierarchy><node/></hierarchy>"
@@ -67,35 +87,18 @@ def test_dump_full_timeline_scrolls_for_lazy_loaded_segments(monkeypatch):
     """Keep the dump with the most segments after scrolling the Timeline list."""
     short_xml = day_dump_xml(
         text_xml("Sun Jun 7, 2026"),
-        button_xml("C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell"),
+        button_xml("C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo"),
         button_xml("En automóvil, 26 min, 10 km, De 1:49 PM a 2:15 PM"),
     )
     full_xml = day_dump_xml(
         text_xml("Sun Jun 7, 2026"),
-        button_xml("C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell"),
+        button_xml("C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo"),
         button_xml("En automóvil, 26 min, 10 km, De 1:49 PM a 2:15 PM"),
-        button_xml("C. 29 5450, Hora de llegada: 8:18 PM, C. 29 5450, B1902 City Bell"),
+        button_xml("C. 12 3456, Hora de llegada: 8:18 PM, C. 12 3456, B1900 Villa Ejemplo"),
     )
 
-    class ScrollDriver(MinimalDriver):
-        """Return the short dump first, then the full dump after one swipe."""
-
-        def __init__(self) -> None:
-            self.swipes = 0
-
-        def dump(self) -> str:
-            """Return the short dump until the first swipe, then the full dump."""
-            return full_xml if self.swipes else short_xml
-
-        def swipe(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-            self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
-        ) -> None:
-            """Count one list swipe."""
-            del x1, y1, x2, y2, duration_ms
-            self.swipes += 1
-
     patch_instant_waits(monkeypatch)
-    driver = ScrollDriver()
+    driver = _RevealDriver(short_xml, full_xml)
     result = dump_full_timeline(driver)
     assert result == full_xml
     assert driver.swipes >= 1
@@ -124,7 +127,7 @@ def test_dump_full_timeline_scrolls_to_top_before_loading_bottom(monkeypatch):
             """Return a minimal stable Timeline dump."""
             return day_dump_xml(
                 text_xml("Sun Jun 7, 2026"),
-                button_xml("C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell"),
+                button_xml("C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo"),
             )
 
     dump_full_timeline(NoSwipeDriver())
@@ -148,7 +151,7 @@ def test_dump_full_timeline_resets_scroll_after_day_change(monkeypatch):
             """Return a minimal stable Timeline dump."""
             return day_dump_xml(
                 text_xml("Yesterday"),
-                button_xml("C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell"),
+                button_xml("C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo"),
             )
 
     dump_full_timeline(StableDriver(), reset_scroll=True)
@@ -219,7 +222,7 @@ def test_dump_full_timeline_respects_max_scroll_attempts(monkeypatch):
     """Stop scrolling after the configured attempt limit even if segments keep growing."""
     xml = day_dump_xml(
         text_xml("Sun Jun 7, 2026"),
-        button_xml("C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell"),
+        button_xml("C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo"),
     )
 
     class GrowingDriver(MinimalDriver):
@@ -232,7 +235,7 @@ def test_dump_full_timeline_respects_max_scroll_attempts(monkeypatch):
         def dump(self) -> str:
             """Return a dump whose segment count grows after each swipe."""
             buttons = [
-                button_xml("C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell")
+                button_xml("C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo")
             ]
             if self.swipes:
                 buttons.extend(
@@ -263,36 +266,19 @@ def test_dump_full_timeline_keeps_scrolling_for_return_home(monkeypatch):
     """Keep scrolling when the day starts at home but the arrival card is still missing."""
     without_arrival = day_dump_xml(
         text_xml("Sat Jun 6, 2026"),
-        button_xml("C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell"),
+        button_xml("C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo"),
         button_xml("En automóvil, 42 min, 13 km, De 8:55 PM a 9:38 PM"),
-        button_xml("R&amp;b cafe, De 4:59 PM a 6:36 PM, CJP, C. 4 366, B1902 La Plata"),
+        button_xml("Cafe Ejemplo, De 4:59 PM a 6:36 PM, Centro, C. 7 120, B1900 Villa Ejemplo"),
     )
     with_arrival = day_dump_xml(
         text_xml("Sat Jun 6, 2026"),
         button_xml("En automóvil, 42 min, 13 km, De 8:55 PM a 9:38 PM"),
-        button_xml("R&amp;b cafe, De 4:59 PM a 6:36 PM, CJP, C. 4 366, B1902 La Plata"),
-        button_xml("C. 29 5450, Hora de llegada: 9:38 PM, C. 29 5450, B1902 City Bell"),
+        button_xml("Cafe Ejemplo, De 4:59 PM a 6:36 PM, Centro, C. 7 120, B1900 Villa Ejemplo"),
+        button_xml("C. 12 3456, Hora de llegada: 9:38 PM, C. 12 3456, B1900 Villa Ejemplo"),
     )
 
-    class ArrivalDriver(MinimalDriver):
-        """Return the same segment count before and after revealing the arrival card."""
-
-        def __init__(self) -> None:
-            self.swipes = 0
-
-        def dump(self) -> str:
-            """Return the dump without arrival until after the first swipe."""
-            return with_arrival if self.swipes else without_arrival
-
-        def swipe(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-            self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
-        ) -> None:
-            """Count one list swipe."""
-            del x1, y1, x2, y2, duration_ms
-            self.swipes += 1
-
     patch_instant_waits(monkeypatch)
-    driver = ArrivalDriver()
+    driver = _RevealDriver(without_arrival, with_arrival)
     result = dump_full_timeline(driver)
     assert result == with_arrival
     assert driver.swipes >= 1

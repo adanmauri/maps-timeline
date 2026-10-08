@@ -1,0 +1,23 @@
+---
+# https://docs.github.com/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # Releases at least two weeks old, as for the pre-commit revs.
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 10
+
+  # Actions are pinned to a commit; Dependabot moves the SHA and its version comment together.
+  # MegaLinter runs as a docker:// image by digest, which Dependabot does not update: it is bumped
+  # by hand (docs/CI.md).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 14

@@ -80,3 +80,30 @@ class DayTimeline(BaseModel):
         if self.summary.visit_count is None:
             return None
         return self.place_visits == self.summary.visit_count
+
+
+class OfficialSegmentKind(StrEnum):
+    """Kind of semantic segment read from the official on-device Timeline export."""
+
+    VISIT = "visit"  # stay at a place (placeId + coordinates, no name)
+    ACTIVITY = "activity"  # movement between two points
+
+
+class OfficialSegment(BaseModel):
+    """One visit or activity from the official on-device Timeline export (Timeline.json)."""
+
+    kind: OfficialSegmentKind
+    start: datetime  # timezone-aware, exactly as exported
+    end: datetime
+    probability: float | None = None
+    place_id: str | None = None  # visits: Google place ID
+    semantic_type: str | None = None  # visits: UNKNOWN, INFERRED_HOME, INFERRED_WORK, ...
+    hierarchy_level: int | None = None  # visits: 0 = top level, 1 = nested inside another visit
+    lat: float | None = None  # visits: place location
+    lon: float | None = None
+    activity_type: str | None = None  # activities: WALKING, IN_PASSENGER_VEHICLE, ...
+    distance_m: float | None = None  # activities: distance traveled
+    start_lat: float | None = None  # activities: start point
+    start_lon: float | None = None
+    end_lat: float | None = None  # activities: end point
+    end_lon: float | None = None

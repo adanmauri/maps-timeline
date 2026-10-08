@@ -1,82 +1,136 @@
 ---
 name: Security & Vulnerability Analysis
 
-on: # yamllint disable-line rule:truthy
+on:
   schedule:
-    - cron: "0 3 * * 1"
+    - cron: "0 3 * * *"
   push:
     branches:
       - main
   pull_request:
     branches:
       - main
-    types:
-      - opened
-      - ready_for_review
-      - reopened
-      - synchronize
+
+permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
-env:
-  PYTHON_VERSION: "3.13"
-
 jobs:
-  bandit:
-    name: Bandit (Python SAST)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
-          cache-dependency-glob: |
-            uv.lock
-            pyproject.toml
-
-      - name: Install dependencies
-        run: uv sync --group dev --frozen
-
-      - name: Run Bandit
-        run: make security
-
   trivy:
-    name: Trivy (filesystem)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
       security-events: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Run Trivy
-        uses: aquasecurity/trivy-action@v0.36.0
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          scan-type: fs
-          scan-ref: .
-          format: sarif
-          output: trivy-results.sarif
+          persist-credentials: false
+
+      - name: Cache Trivy database
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db
+          restore-keys: |
+            ${{ runner.os }}-trivy-
+
+      - name: Run Trivy vulnerability scanner
+        id: trivy-scan
+        # Pinned to a commit: in March 2026 almost every tag of this action was rewritten to
+        # malware (docs/adr/0013).
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        continue-on-error: true
+        with:
+          # The Trivy binary, pinned too: the attack also published a malicious Trivy release.
+          version: "v0.70.0"
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
           ignore-unfixed: true
-          severity: CRITICAL,HIGH
-          exit-code: "0"
-          skip-dirs: .git,.github,.venv,__pycache__,.pytest_cache,.mypy_cache,.ruff_cache,dist,build,data
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+          skip-dirs: |
+            .git
+            .github
+            .venv
+            __pycache__
+            .pytest_cache
+            .mypy_cache
+            .ruff_cache
+            data
 
-      - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('trivy-results.sarif') != ''
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        # Not on pull requests: those from forks and from Dependabot get a read-only token, and the
+        # Security tab tracks main, which the push and the daily run cover.
+        if: >-
+          always() && github.event_name != 'pull_request' &&
+          steps.trivy-scan.outcome != 'skipped' && hashFiles('trivy-results.sarif') != ''
         with:
-          sarif_file: trivy-results.sarif
+          sarif_file: "trivy-results.sarif"
+          wait-for-processing: true
+
+      - name: Display Trivy summary
+        if: always()
+        run: |
+          {
+            echo "## Trivy Security Scan Results"
+            if [ -f "trivy-results.sarif" ] && [ -s "trivy-results.sarif" ]; then
+              echo "Scan completed. Results uploaded to the Security tab (except from pull requests)."
+            else
+              echo "Scan completed but no results file was generated."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  bandit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --no-default-groups --group lint
+
+      - name: Run Bandit security scan
+        id: bandit-scan
+        continue-on-error: true
+        run: |
+          uv run --no-sync bandit -r maps_timeline/ --severity-level medium --confidence-level medium -c pyproject.toml -f json -o bandit-report.json
+          uv run --no-sync bandit -r maps_timeline/ --severity-level medium --confidence-level medium -c pyproject.toml -f txt -o bandit-report.txt
+
+      - name: Display Bandit results
+        if: always()
+        run: |
+          {
+            echo "## Bandit Security Scan Results"
+            if [ ! -f bandit-report.json ]; then
+              echo "Bandit did not produce a report; check the scan step."
+              exit 0
+            fi
+            HIGH=$(jq -r '.metrics._totals."SEVERITY.HIGH" // 0' bandit-report.json)
+            MEDIUM=$(jq -r '.metrics._totals."SEVERITY.MEDIUM" // 0' bandit-report.json)
+            LOW=$(jq -r '.metrics._totals."SEVERITY.LOW" // 0' bandit-report.json)
+            echo "- **High severity**: $HIGH"
+            echo "- **Medium severity**: $MEDIUM"
+            echo "- **Low severity**: $LOW"
+            if [ "$((HIGH + MEDIUM + LOW))" -gt 0 ]; then
+              echo '```'
+              head -n 100 bandit-report.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

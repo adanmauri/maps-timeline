@@ -334,14 +334,14 @@ def timeline_anchor_flags(dump_xml: str) -> tuple[bool, bool]:
 
 def is_richer_timeline_dump(candidate: str, current: str) -> bool:
     """Return True when `candidate` is a strictly better scroll snapshot than `current`."""
-    cand_count = count_timeline_segments(candidate)
-    cur_count = count_timeline_segments(current)
-    if cand_count > cur_count:
+    candidate_count = count_timeline_segments(candidate)
+    current_count = count_timeline_segments(current)
+    if candidate_count > current_count:
         return True
-    if cand_count < cur_count:
+    if candidate_count < current_count:
         return False
-    _, cand_arr = timeline_anchor_flags(candidate)
-    cur_dep, cur_arr = timeline_anchor_flags(current)
-    if cur_dep and cand_arr and not cur_arr:
+    _, candidate_arrival = timeline_anchor_flags(candidate)
+    current_departure, current_arrival = timeline_anchor_flags(current)
+    if current_departure and candidate_arrival and not current_arrival:
         return True
     return False

@@ -160,3 +160,47 @@ def test_load_dataframe_missing_file(tmp_path: Path):
     """Raise FileNotFoundError when the dataset path does not exist."""
     with pytest.raises(FileNotFoundError):
         load_dataframe(tmp_path / "missing.csv")
+
+
+def test_summarize_merged_dataset():
+    """Report sources and named visits, and keep stay time out of travel time."""
+    df = pd.DataFrame(
+        [
+            {
+                "day": "2026-06-06",
+                "type": "place_visit",
+                "title": "Cafe",
+                "address": None,
+                "duration_min": 60.0,
+                "lat": -34.6,
+                "source": "both",
+            },
+            {
+                "day": "2026-06-07",
+                "type": "place_visit",
+                "title": None,
+                "address": None,
+                "duration_min": 30.0,
+                "lat": -34.6,
+                "source": "export",
+            },
+            {
+                "day": "2026-06-07",
+                "type": "activity",
+                "title": "WALKING",
+                "address": None,
+                "duration_min": 15.0,
+                "lat": None,
+                "source": "export",
+            },
+        ]
+    )
+    summary = summarize(df)
+    assert summary.total_travel_min == 15.0
+    assert summary.geocoded is None
+    assert summary.sources == {"both": 1, "export": 2}
+    assert summary.named_visits == (1, 2)
+    text = render(summary)
+    assert "Sources:          both 1 | export 2" in text
+    assert "Named visits:     1/2" in text
+    assert "Geocoded:" not in text

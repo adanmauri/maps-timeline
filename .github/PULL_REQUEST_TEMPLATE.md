@@ -1,32 +1,22 @@
-# Pull Request
+<!-- markdownlint-disable-file MD041 -->
+<!--
+Title: Conventional Commits, e.g. `fix(parser): read unconfirmed visits`.
+Link the issue in the summary: "Closes #123".
+Never paste real location data: no place names, addresses, coordinates or an official export.
+-->
 
 ## Summary
 
-<!-- What changed and why. Link issues: Fixes #N -->
+<!-- What changes and why. Impact on users first: new or changed commands and options, changed
+files or columns under data/, whether earlier runs need anything. -->
 
-## Type of change
+## Test plan
 
-- [ ] Bug fix (non-breaking)
-- [ ] New feature (non-breaking)
-- [ ] Breaking change (JSONL schema, CLI flags, or output columns)
-- [ ] Documentation only
-- [ ] Tests only
+<!-- How it was tested, with the result. Only what was actually run: `make check`; for selectors,
+navigation or the walk, the run on a phone described in AGENTS.md (scope and counts only). Say
+what is still unverified. -->
 
-## Testing
+## Breaking change
 
-```bash
-make quality
-make test
-# uv run maps-timeline parse-file <dump>.xml   # if parser changed
-```
-
-- [ ] Offline tests pass (no phone required)
-- [ ] Live device test performed (if scrape/navigation changed)
-
-## Checklist
-
-- [ ] Layer boundaries respected ([`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md))
-- [ ] `maps_timeline/` at 100% test coverage
-- [ ] Docs updated when behavior or CLI changed
-- [ ] No `data/` or location PII committed
-- [ ] Spanish UI selectors left untranslated
+<!-- What breaks (raw JSONL, commands or options, dataset columns) and how to update. Delete this
+section if nothing breaks. -->

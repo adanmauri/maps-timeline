@@ -1,4 +1,4 @@
-# Datos personales extraídos (NO versionar)
+# Personal location data: never commit it (see docs/adr/0007)
 data/
 dump*.xml
 *.png
@@ -8,9 +8,18 @@ dump*.xml
 __pycache__/
 *.pyc
 .coverage
+coverage.xml
+coverage.json
 htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Build artifacts
 dist/
 build/
 *.egg-info/
+
+# Agents: personal settings and scratch files (e.g. pr-body.tmp from the write-pr skill)
+.claude/settings.local.json
+*.tmp

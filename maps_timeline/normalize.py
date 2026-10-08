@@ -10,7 +10,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -71,41 +71,47 @@ def to_iso(day: str, time_text: str | None) -> str | None:
         return None
 
 
-def normalize(jsonl_path: Path, out_dir: Path, geocoder: NominatimGeocoder | None = None) -> Path:
-    """Flatten the JSONL into a DataFrame and write it as CSV and Parquet.
-
-    If a `geocoder` is passed, add lat/lon columns by resolving the addresses
-    (cached, one query per unique address).
-    """
-    rows = []
+def read_days(jsonl_path: Path) -> list[dict[str, Any]]:
+    """Read the raw JSONL into one dict per scraped day, skipping blank lines."""
+    days = []
     with jsonl_path.open(encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
-            if not line:
-                continue
-            day_obj = json.loads(line)
-            day = str(day_obj["day"])
-            for seg in day_obj.get("segments", []):
-                rows.append(
-                    {
-                        "day": day,
-                        "type": seg.get("type"),
-                        "title": seg.get("title"),
-                        "address": seg.get("address"),
-                        "start_iso": to_iso(day, seg.get("start_time")),
-                        "end_iso": to_iso(day, seg.get("end_time")),
-                        "duration_min": parse_duration_minutes(seg.get("duration_text")),
-                        "distance_km": parse_distance_km(seg.get("distance_text")),
-                        "confirmed": seg.get("confirmed"),
-                        "needs_user_action": seg.get("needs_user_action"),
-                    }
-                )
+            if line:
+                days.append(json.loads(line))
+    return days
 
+
+def scrape_row(day: str, seg: dict[str, Any]) -> dict[str, Any]:
+    """Flatten one raw scraped segment into a clean dataset row."""
+    return {
+        "day": day,
+        "type": seg.get("type"),
+        "title": seg.get("title"),
+        "address": seg.get("address"),
+        "start_iso": to_iso(day, seg.get("start_time")),
+        "end_iso": to_iso(day, seg.get("end_time")),
+        "duration_min": parse_duration_minutes(seg.get("duration_text")),
+        "distance_km": parse_distance_km(seg.get("distance_text")),
+        "confirmed": seg.get("confirmed"),
+        "needs_user_action": seg.get("needs_user_action"),
+    }
+
+
+def write_dataset(
+    rows: list[dict[str, Any]], out_dir: Path, geocoder: NominatimGeocoder | None = None
+) -> Path:
+    """Write clean rows as CSV and Parquet; geocode addresses of rows that lack lat/lon.
+
+    If a `geocoder` is passed, rows without coordinates get lat/lon by resolving their
+    address (cached, one query per unique address).
+    """
     if geocoder is not None:
-        unique_addresses = {r["address"] for r in rows if r.get("address")}
+        pending = [r for r in rows if r.get("lat") is None]
+        unique_addresses = {r["address"] for r in pending if r.get("address")}
         print(f"[·] Geocoding {len(unique_addresses)} unique addresses (Nominatim)...")
         coords = {addr: geocoder.geocode(addr) for addr in unique_addresses}
-        for r in rows:
+        for r in pending:
             r["lat"], r["lon"] = coords.get(r.get("address"), (None, None))
 
     df = pd.DataFrame(rows)
@@ -116,3 +122,17 @@ def normalize(jsonl_path: Path, out_dir: Path, geocoder: NominatimGeocoder | Non
     df.to_parquet(parquet_path, index=False)
     print(f"[✓] {len(df)} segments normalized -> {csv_path.name}, {parquet_path.name}")
     return csv_path
+
+
+def normalize(jsonl_path: Path, out_dir: Path, geocoder: NominatimGeocoder | None = None) -> Path:
+    """Flatten the JSONL into a DataFrame and write it as CSV and Parquet.
+
+    If a `geocoder` is passed, add lat/lon columns by resolving the addresses
+    (cached, one query per unique address).
+    """
+    rows = [
+        scrape_row(str(day_obj["day"]), seg)
+        for day_obj in read_days(jsonl_path)
+        for seg in day_obj.get("segments", [])
+    ]
+    return write_dataset(rows, out_dir, geocoder)

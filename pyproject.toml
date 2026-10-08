@@ -18,24 +18,22 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
+test = ["pytest", "pytest-cov"]
+lint = [
     "bandit",
     "black",
     "flake8",
-    "flake8-pyproject>=1.2.4",
-    "httpx",
     "isort",
     "mypy",
-    "pandas-stubs>=3.0.3.260530",
-    "pre-commit",
+    "pandas-stubs",
     "pylint",
-    "pylint-pydantic>=0.4.1",
+    "pylint-pydantic",
     "pyright",
-    "pytest",
-    "pytest-cov",
     "ruff",
-    "types-requests>=2.33.0.20260518",
+    "types-requests",
+    "yamllint",
 ]
+dev = [{ include-group = "test" }, { include-group = "lint" }]
 
 [project.urls]
 Homepage = "https://github.com/adanmauri/maps-timeline"
@@ -54,7 +52,7 @@ packages = ["maps_timeline"]
 
 [tool.black]
 line-length = 100
-target-version = ["py313"]
+target-version = ["py313", "py314"]
 
 [tool.isort]
 profile = "black"
@@ -68,12 +66,6 @@ target-version = "py313"
 select = ["E", "F", "W", "I", "UP", "B"]
 # E501: line length is owned by black (see AGENTS.md).
 ignore = ["E501"]
-
-[tool.flake8]
-max-line-length = 100
-# E203/W503: false positives when using black as the formatter (see AGENTS.md).
-extend-ignore = ["E203", "W503"]
-exclude = [".venv", "build", "dist", "__pycache__"]
 
 [tool.mypy]
 python_version = "3.13"
@@ -98,7 +90,7 @@ load-plugins = ["pylint_pydantic"]
 max-line-length = 100
 
 [tool.bandit]
-exclude_dirs = ["tests", ".venv"]
+exclude_dirs = ["tests", "tooling", ".venv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

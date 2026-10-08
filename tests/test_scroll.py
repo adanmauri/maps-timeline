@@ -15,7 +15,7 @@ def test_timeline_scroll_lane_uses_segment_column():
     """Anchor swipes in the horizontal center of parsed Timeline segments."""
     dump = day_dump_xml(
         button_xml(
-            "C. 29 5450, Hora de salida: 1:49 PM, C. 29 5450, B1902 City Bell",
+            "C. 12 3456, Hora de salida: 1:49 PM, C. 12 3456, B1900 Villa Ejemplo",
             bounds="[213,2058][1211,2261]",
         ),
         button_xml(
@@ -48,7 +48,7 @@ def test_timeline_scroll_lane_skips_invalid_bounds():
             bounds="not-bounds",
         ),
         button_xml(
-            "C. 29 5450, Hora de salida: 4:08 PM, C. 29 5450, B1902 City Bell",
+            "C. 12 3456, Hora de salida: 4:08 PM, C. 12 3456, B1900 Villa Ejemplo",
             bounds="[213,2058][1211,2261]",
         ),
     )

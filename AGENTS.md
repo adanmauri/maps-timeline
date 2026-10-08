@@ -1,384 +1,122 @@
-# AI Agents Guidelines
+# maps-timeline: agent operating guidelines
 
-## Overview
+Canonical, vendor-neutral instructions for AI agents working in this repo
+([agents.md](https://agents.md/) standard). `CLAUDE.md` and `.github/copilot-instructions.md` are
+thin pointers here.
 
-This document defines the operating principles, execution protocols, and
-guardrails for AI agents working on the **maps-timeline (`maps_timeline`)**
-project. The goal is to keep assistance consistent, secure, and useful while
-preserving code quality and project standards.
+## What this repo is
 
-### Project Context
+A Python CLI that recovers the Google Maps **Timeline** from an Android phone. Google keeps the
+Timeline on the device only, so the tool reads what the app draws: it asks the phone for the
+accessibility tree over ADB, saves each day as raw text, and turns that into a clean dataset. The
+phone's official Timeline export (coordinates and place IDs, no names) merges with the scrape and
+can plan which days to capture.
 
-`maps_timeline` is a command-line tool written in **Python 3.13** that extracts
-the **location history (Routes/Timeline) from Google Maps** on an Android phone,
-reading the accessibility hierarchy (`uiautomator` XML dump) over **ADB**.
+Two facts shape every change. The data is a person's **location history**, and the repository is
+public: nothing real ever goes into it. And what the app shows can only be checked on a real
+phone: a change to selectors, navigation or the walk is verified there (see
+[Verification](#verification)).
 
-The core idea is a **two-stage, decoupled design**:
+## Read before working
 
-1. **Scraping (raw data)**: walks the Timeline day by day, going backwards, and
-   saves each day exactly as it appears on screen into a raw JSONL file. It does
-   not interpret numbers or dates: it only captures text.
-2. **Normalization**: converts the raw JSONL into a clean dataset (CSV +
-   Parquet), parsing durations, distances, and times into numeric / ISO types.
+| Concern                                                       | Source                                                                       |
+|---------------------------------------------------------------|------------------------------------------------------------------------------|
+| What the tool does, install, workflows, troubleshooting       | [`README.md`](README.md)                                                     |
+| Every command and option                                      | [`docs/CLI.md`](docs/CLI.md)                                                 |
+| Raw JSONL, official export and clean dataset schemas          | [`docs/DATA.md`](docs/DATA.md)                                               |
+| How it works inside: layers, the walk, UI findings, the merge | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)                               |
+| Setup, commands, conventions, tests, dependencies, releasing  | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)                                 |
+| Which check runs where, CI workflows, linter versions         | [`docs/CI.md`](docs/CI.md)                                                   |
+| Decisions and their rationale                                 | [`docs/adr/`](docs/adr/README.md)                                            |
+| Hard constraints: location data, the phone, layers            | [`.agents/rules/scraper-guardrails.md`](.agents/rules/scraper-guardrails.md) |
+| Code style and tooling                                        | [`.agents/rules/coding-standards.md`](.agents/rules/coding-standards.md)     |
+| Pending work                                                  | [`TODO.md`](TODO.md)                                                         |
+| How agent assets are organized                                | [`.agents/README.md`](.agents/README.md)                                     |
 
-Splitting the two stages makes it possible to **reprocess** the raw data (for
-example, when improving the parser) without having to re-scan the phone.
+## Layout
 
-The code (docstrings, comments, and CLI messages) is written in **English**,
-which is the project's language. The only Spanish strings allowed in the code are
-**UI selectors / regexes that must match the Google Maps app**, which renders in
-Spanish (e.g. `"Día anterior"`, `"En automóvil"`, `"¿Visitaste"`); these must not
-be translated.
-
-### Project Structure
-
-```
-.
-├── maps_timeline/
-│   ├── __init__.py      # package version
-│   ├── cli.py           # command-line interface (typer): run, scrape, normalize, stats, parse-file, dump
-│   ├── device.py        # transport layer: Driver (Protocol), U2Driver, AdbRawDriver, make_driver
-│   ├── navigator.py     # navigation: read the header date and step back one day
-│   ├── parser.py        # pure parsing of the XML dump -> DayTimeline (testable with saved dumps)
-│   ├── pipeline.py      # orchestrates the sequential scraping loop and writes the raw JSONL
-│   ├── paths.py         # versioned run dirs under data/runs/, data/latest marker
-│   ├── scroll.py        # Timeline list swipe gestures from segment bounds
-│   ├── waits.py         # explicit waits, panel expansion, dump_full_timeline
-│   ├── normalize.py     # raw JSONL -> DataFrame -> CSV + Parquet (pandas)
-│   ├── geocode.py       # optional: NominatimGeocoder (addresses -> lat/lon, cached)
-│   ├── stats.py         # console summary over the clean DataFrame
-│   └── models.py        # domain models (pydantic): Segment, DaySummary, DayTimeline, enums
-├── data/                # gitignored — sensitive exports (see docs/DATA.md)
-│   ├── latest           # pointer to most recent run
-│   ├── cache/           # geocode.json (Nominatim cache)
-│   └── runs/<stamp>/    # raw/timeline.jsonl + clean/timeline.{csv,parquet}
-├── docs/                # ARCHITECTURE, CLI, DATA, DEVELOPMENT guides
-├── tests/               # one test file per module + conftest.py
-├── dump_*.xml           # sample XML dumps for offline testing (parse-file)
-├── pyproject.toml       # metadata, dependencies, and the `maps-timeline` script
-├── uv.lock              # reproducible lockfile (UV)
-├── Makefile             # install, quality, CLI shortcuts
-├── README.md
-└── AGENTS.md
+```text
+maps_timeline/cli.py         typer commands: run, scrape, normalize, import, stats, parse-file, dump
+maps_timeline/device.py      transport: the Driver protocol, uiautomator2 and raw adb drivers
+maps_timeline/navigator.py   reads the header date, taps "Día anterior"
+maps_timeline/scroll.py      swipe lanes from segment bounds
+maps_timeline/waits.py       stable-screen waits, the full-day dump
+maps_timeline/parser.py      pure: XML dump -> DayTimeline
+maps_timeline/pipeline.py    the day-by-day walk (capture or step over), raw JSONL
+maps_timeline/paths.py       data/runs/<stamp>/ folders and the data/latest marker
+maps_timeline/normalize.py   raw JSONL -> CSV + Parquet
+maps_timeline/official.py    pure: official on-device export -> OfficialSegment
+maps_timeline/history.py     every run's raw JSONL as one scrape history
+maps_timeline/merge.py       aligns scrape and export, propagates names, builds the dataset
+maps_timeline/planner.py     pure: which days to capture, from the export
+maps_timeline/geocode.py     optional Nominatim geocoding, cached
+maps_timeline/stats.py       console summary
+maps_timeline/models.py      pydantic models and enums
+tests/                       one file per module; synthetic fixtures in conftest.py
+tooling/                     repo scripts (agent pointers, docs check, commit-msg hook), not shipped
+data/                        git-ignored: runs, caches, drafts. Real location data, never committed
 ```
 
-### Architecture and Layers
-
-The project follows a strict separation of concerns so that logic is testable
-without a connected phone:
-
-| Layer | Module | Responsibility |
-| --- | --- | --- |
-| CLI | `cli.py` | Command definitions (typer), option parsing, user output. Must be thin and delegate to the other layers. |
-| I/O layout | `paths.py` | Versioned `data/runs/<stamp>/` folders, `data/latest` marker, default path resolution for CLI. |
-| Transport | `device.py` | Talk to the device: `dump()`, `tap_xy()`, `swipe()`, `screenshot()`. A "dumb", interchangeable driver (uiautomator2 ↔ raw ADB). |
-| Navigation | `navigator.py` | Read the displayed date and tap "Previous day". The source of truth for the day is date arithmetic; the header only **verifies** it. |
-| Gestures | `scroll.py` | Compute swipe lanes from segment button bounds; expand collapsed Timeline panel. |
-| Waits | `waits.py` | Stable-screen waits, `dump_full_timeline()`, panel expansion orchestration. |
-| Parsing | `parser.py` | Convert the XML into a `DayTimeline`. **Pure function**: operates on the XML, never touches the device. |
-| Orchestration | `pipeline.py` | Day-by-day scraping loop, date-drift checks, debug artifacts, and writing the raw JSONL. |
-| Normalization | `normalize.py` | Flatten the JSONL into a DataFrame and write CSV + Parquet; optionally add lat/lon via a geocoder. |
-| Geocoding | `geocode.py` | Optional post-processing: resolve addresses to lat/lon via Nominatim (OpenStreetMap), with caching and rate limiting. Pure HTTP, no device access. |
-| Reporting | `stats.py` | Console summary (totals, top places) from the clean DataFrame. Pure functions, no device access. |
-| Models | `models.py` | Domain structures (pydantic) and enums (`SegmentType`, `TimeAnchor`). |
-
-**Key principle**: all the intelligence (finding nodes, classifying segments,
-reading dates) operates **on the XML**, not on the device. This keeps the
-drivers (uiautomator2 and raw ADB) interchangeable and lets the logic be tested
-with the same saved dumps.
-
-### Data Flow
-
-```
-Phone (Google Maps, "Routes" screen)
-   │  driver.dump()  (accessibility XML)
-   ▼
-pipeline.scrape  ──parse_day──►  DayTimeline (pydantic)
-   │
-   ▼
-data/runs/<stamp>/raw/timeline.jsonl   (one day per line, raw data)
-   │  normalize
-   ▼
-data/runs/<stamp>/clean/timeline.csv  +  timeline.parquet  (clean dataset)
-   │  stats (optional)
-   ▼
-console summary
-```
-
-## Core Principles
-
-### 1. Decoupled, Testable Design
-
-- Keep parsing as **pure functions** over XML, with no I/O side effects or device
-  calls.
-- Any new scraping logic must be testable **offline** with a saved XML dump (see
-  the `parse-file` command).
-- Do not mix transport (ADB/uiautomator2) with parsing or normalization.
-
-### 2. Security and Privacy
-
-- **Sensitive personal data**: the Timeline contains location history. Never
-  upload, expose, or commit real user data (contents of `data/`, XML dumps with
-  real addresses) unless explicitly requested.
-- **No hardcoded credentials**: do not embed device serials, tokens, or private
-  paths in the code; use CLI options / environment variables.
-- **Do not modify the device**: the scraper only reads the screen and navigates
-  (UI taps/swipes). Never run destructive ADB commands or install / uninstall
-  apps without explicit authorization.
-
-### 3. Code Quality Standards
-
-- **Type hints** on all function and method signatures.
-- **Pydantic** for domain models.
-- Clear error handling with descriptive messages.
-- Clear docstrings (see the format below).
-
-## Code Quality Standards
-
-### Language and Communication
-
-- **Comments, docstrings, and CLI messages in English** (the project's
-  language). Keep Spanish only for UI selectors/regexes that must match the
-  Google Maps app (it renders in Spanish); never translate those.
-- **Logs / outputs must not rely on emojis** to convey information; the existing
-  decorative emojis in CLI messages (`[✓]`, `[!]`, `[·]`) may be kept for
-  consistency, but the message must be readable without them.
-- Clear, actionable error messages (what happened and what to do).
-
-### Python Version and Type Hints
-
-- **Python 3.13+ syntax is required.**
-- Use `from __future__ import annotations` (already present in the modules).
-- Use built-in types instead of the `typing` module when possible:
-  - `dict` instead of `typing.Dict`
-  - `list` instead of `typing.List`
-  - `tuple` instead of `typing.Tuple`
-  - `set` instead of `typing.Set`
-- Prefer union syntax:
-  - `type | None` instead of `Optional[type]` (e.g. `str | None`)
-  - `type1 | type2` instead of `Union[type1, type2]`
-- Import from `typing` / `collections.abc` only what is needed (e.g. `Any`,
-  `Protocol`, `Callable`, `cast`, `TYPE_CHECKING`, `Literal`). Do not import
-  `Optional`, `Dict`, `List`, `Tuple`, `Set`, or `Union`.
-
-**Examples:**
-
-```python
-# Correct (Python 3.13+)
-def parse_segment(desc: str) -> Segment | None:
-    ...
-
-def make_driver(serial: str | None = None, prefer: str = "u2") -> Driver:
-    ...
-```
-
-### Docstring Format
-
-Every **module**, **class**, and **function/method** (including private `_`
-helpers and test functions) must have a docstring:
-
-- **Modules**: opening docstring describing the purpose; may be multi-line when
-  it adds context (UI findings, design decisions).
-- **Classes**: brief docstring explaining the responsibility.
-- **Functions/methods**: single-line docstring by default; multi-line only if it
-  exceeds ~100 characters or needs to list structured information.
-- Do not include "Args:", "Returns:", or "Parameters:" sections.
-- No blank line between the docstring and the first line of code in a function.
-
-### Code Style
-
-- Follow PEP 8.
-- Target line length: 100.
-- Descriptive variable and function names.
-- Prefer explicit over implicit code.
-- "Private" helper functions / internals use the `_` prefix (e.g. `_classify`,
-  `_parse_time`, `_iter_button_descs`).
-
-### Imports
-
-- Group: standard library, third-party, local.
-- Use relative imports within the `maps_timeline` package (e.g.
-  `from .parser import parse_day`).
-- Heavy or device-dependent imports (e.g. `uiautomator2`) may be deferred inside
-  the function so they do not penalize CLI startup or offline flows (a pattern
-  already used in `cli.py` and `device.py`).
-
-### Error Handling
-
-- Use specific exception types when possible
-- Include descriptive error messages in English
-- Use `ValueError` for invalid input
-- Use `FileNotFoundError` for missing files
-- Use `NotImplementedError` for abstract methods
-- Use specific exception types when possible.
-- `RuntimeError` for device connection failures (already used in `make_driver`).
-- In the scraping loop, navigation failures must honor the `on_error` policy
-  (`skip` vs `abort`) and record the failed day, without aborting the whole
-  process unless requested.
-
-### Linting and Suppressions
-
-- **Fix the code first.** Prefer refactoring, tighter types, or clearer structure
-  over silencing a linter or type checker.
-- **Do not hide diagnostics in `pyproject.toml`** except for ecosystem-wide
-  incompatibilities that cannot be expressed per line:
-  - `flake8` `E203` / `W503` when using `black` as the formatter.
-  - `ruff` `E501` when `black` owns line wrapping.
-  - `mypy` `ignore_missing_imports` for third-party modules that ship no stubs
-    (currently `uiautomator2`, `pyarrow`).
-- **Inline suppressions only on the offending line**, with a short reason when
-  it is not obvious:
-  - `# pylint: disable=import-outside-toplevel` on deferred imports in `cli.py`
-    and `device.py` (startup cost).
-  - `# nosec B603` on fixed-argv `subprocess.run(...)` calls in `device.py`.
-  - `# nosec B405` / `# nosec B314` on `xml.etree` usage (trusted local adb /
-    saved dumps, not arbitrary network XML).
-  - `# pylint: disable=unnecessary-ellipsis` on `...` stubs inside `typing.Protocol`
-    bodies (required by pyright; docstrings must still be present).
-  - `# noqa: B904` / `# type: ignore[...]` only when the checker is wrong and
-    there is no clean alternative.
-- **Typer CLI options**: use `typing.Annotated[..., typer.Option(...)]` instead
-  of `# noqa` for `ruff` rule `B008`.
-- **`bandit`** scans `maps_timeline` only (`make security`); tests intentionally
-  use `assert` and are out of scope.
-- Run **`make quality && make test`** before finishing a change (or the
-  individual targets below). **`make quality` does not run tests.**
-
-| Target | What it runs |
-| --- | --- |
-| `make quality` | `lint` + `type-check` + `security` (ruff, flake8, pylint, mypy, pyright, bandit) |
-| `make test` | pytest with **100%** line/branch coverage on `maps_timeline/` |
-| `make lint` / `make type-check` / `make security` | Subset of `make quality` |
-
-## Dependency Management
-
-- **Use UV** (`pyproject.toml` + `uv.lock`).
-- Production dependencies in `[project.dependencies]`, with minimum/compatible
-  version constraints; exact versions are pinned by `uv.lock`.
-- Keep dependencies **alphabetically sorted**.
-- Add packages with `uv add <pkg>` (and `uv add --dev <pkg>` for development
-  tools); never hand-edit the lockfile.
-- Commit `uv.lock` for reproducible builds.
-- Current dependencies: `pandas`, `pyarrow`, `pydantic`, `requests`, `tenacity`,
-  `typer`, `uiautomator2`.
-
-## CLI Usage
-
-The project exposes the `maps-timeline` command (defined in `[project.scripts]`).
-Full option reference: `docs/CLI.md`.
-
-```bash
-# Scrape + normalize + summary (recommended)
-uv run maps-timeline run --days 3
-
-# Walk the Timeline day by day and save the raw JSONL
-uv run maps-timeline scrape --days 3
-
-# Convert the raw JSONL into CSV + Parquet
-uv run maps-timeline normalize
-
-# Print a console summary of the clean dataset
-uv run maps-timeline stats
-
-# Convert and also geocode addresses to lat/lon (Nominatim / OpenStreetMap)
-uv run maps-timeline normalize --geocode --nominatim-email you@example.com
-
-# Offline test: parse a saved XML dump (no phone required)
-uv run maps-timeline parse-file dump_dia.xml
-
-# Take a single dump of the current screen (to calibrate selectors)
-uv run maps-timeline dump --out dump.xml
-```
-
-**Requirements for live scraping**: an Android phone with USB debugging
-enabled, `adb` available, and Google Maps open on the **Routes** screen ("Day"
-view) before running `scrape`.
-
-## Execution Protocols
-
-### 1. Before Implementing
-
-1. **Identify the layer** involved (CLI → transport → navigation → parsing →
-   orchestration → normalization → models) and respect its responsibilities.
-2. **Verify dependencies** and configuration.
-3. **Assess the impact** on the raw → clean data flow.
-4. **Plan the offline test** with saved dumps where applicable.
-
-### 2. Implementation Guidelines
-
-- Respect the existing structure and patterns.
-- Keep the CLI thin: logic lives in the modules, not in the commands.
-- Any change to the models (`models.py`) must remain compatible with
-  reprocessing the already-generated raw JSONL, or document the incompatibility.
-
-### 3. Quality Assurance
-
-The project uses `make` targets for validation. Before finishing a change:
-
-- Confirm the CLI imports and runs: `uv run maps-timeline --help`.
-- Run **`make quality && make test`** — they are separate gates:
-  - `make quality` → lint, type-check, security (no pytest).
-  - `make test` → pytest with **100% line and branch coverage** on
-    `maps_timeline/` (`--cov-fail-under=100`).
-- Run the offline parse against a saved dump when parser logic changed:
-  `uv run maps-timeline parse-file dump_dia.xml` and check that the segment
-  count matches the summary (`summary_matches()`).
-
-Tests live under `tests/`, **one file per module** (`test_parser.py`,
-`test_pipeline.py`, …) plus `conftest.py` for shared fixtures (`FakeDriver`,
-synthetic XML builders, sample JSONL). Favor **pure functions** and mocked I/O
-(device drivers, HTTP geocoding, subprocess) so nothing requires a connected
-phone.
-
-Quality tools (dev dependencies): `ruff`, `flake8`, `pylint`, `mypy`,
-`pyright`, `bandit`, `black`, `isort`, `pytest`, `pytest-cov`. Configuration
-lives in `pyproject.toml`; see **Linting and Suppressions** above for the
-policy on global vs inline disables.
-
-## Guardrails and Limitations
-
-### Security
-
-- Do not embed credentials, serials, or personal data in the code.
-- Do not upload or expose the contents of `data/` or dumps with real locations.
-- Do not run destructive ADB commands or modify the device state beyond the UI
-  navigation needed for scraping.
-
-### Operational
-
-- **No breaking changes**: preserve the raw JSONL compatibility and the CLI
-  interface.
-- **No new external dependencies** without justification; prefer what is already
-  in `pyproject.toml`.
-- **Documentation inside the repo**: update `README.md`, `docs/`, and this file when
-  commands, data flow, or architecture change.
-
-### Data Handling
-
-- Treat location history as **sensitive personal data**.
-- Do not log addresses, coordinates, or place names in unnecessary messages.
-
-## Documentation Maintenance
-
-Keep these files in sync when behavior, CLI, schemas, or architecture change:
-
-| File | Purpose |
-| --- | --- |
-| `README.md` | User-facing overview, quick start, troubleshooting |
-| `docs/ARCHITECTURE.md` | Layers, scraping loop, UI findings, reliability |
-| `docs/CLI.md` | Complete command and option reference |
-| `docs/DATA.md` | JSONL / CSV / Parquet schemas, geocoding |
-| `docs/DEVELOPMENT.md` | Contributor setup, `make` targets, testing |
-| `docs/README.md` | Documentation index |
-| `.agents/skills/` | Project agent skills (branch, PR, issues) — **source of truth** |
-| `.cursor/skills/` | Stubs → `.agents/skills/` (Cursor IDE) |
-| `.cursor/rules/` | Cursor rules pointing here |
-| `.github/` | CI workflows and PR template |
-| `AGENTS.md` | This file — agent guardrails and code standards |
-
-Use clear, concise language; include only short snippets when necessary.
-
----
-
-**Last Updated**: 2026-06-16
-**Version**: 2.3
+## Workflow
+
+0. **Once per clone:** `make setup` creates the environment and installs the git hooks
+   (pre-commit and commit-msg). Needs `uv`.
+1. **Branch** from an up-to-date `main` with `create-branch`: `feat/...`, `fix/...`, `docs/...`,
+   `chore/...`.
+2. **Commit** with the `create-commit` skill (Conventional Commits, no tool attribution).
+3. **Open the PR** with `write-pr` (body) and `make-pr` (mechanics).
+4. **Record decisions:** a change that reverses or extends an ADR comes with a new one, from
+   [`docs/adr/template.md`](docs/adr/template.md); rules cite the ADR instead of repeating it.
+
+## Before you finish
+
+- `make check` passes: every hook in [`.pre-commit-config.yaml`](.pre-commit-config.yaml) over the
+  whole repo, then the tests on Python 3.14 with 100% line and branch coverage, and on 3.13 (the
+  oldest Python the tool supports).
+- `uv run maps-timeline --help` works, and so does `--help` on any command you changed.
+- A parser change adds a case to `tests/test_parser.py` with a synthetic dump; a change to the
+  walk, the planner or the merge adds cases to its own test file.
+- README, `docs/` and this file agree with the change: options in `docs/CLI.md`, files and columns
+  in `docs/DATA.md`, layers and the walk in `docs/ARCHITECTURE.md`.
+- CI also runs the scanners that have no local hook (vulnerabilities, verified secrets, links,
+  JSON schemas) through MegaLinter (`.github/workflows/code-quality.yaml`); check its result on
+  the pull request.
+
+## Verification
+
+Unit tests cover parsing, planning, merging and the walk against a fake driver. They cannot prove
+the app behaves the way the fakes assume. When a change touches selectors, navigation, waits,
+scrolling or the walk:
+
+1. Ask the user to connect the phone (USB debugging on) and open Google Maps on **Rutas → Día**.
+   Agents never start a scrape on their own.
+2. Run a short walk, such as `uv run maps-timeline scrape --days 3`, and read the counts it prints
+   and the files under `raw/debug/`, not the place names.
+3. Ask the user to compare the captured days with what the app shows. An agent cannot see the
+   phone; do not report device behavior as verified without them.
+4. Everything that run produced is real location data: it stays under `data/`, and never goes
+   into a commit, a pull request or an issue.
+
+## Boundaries
+
+- Never push to `main`, force-push, or rewrite shared history unless the user asks for it.
+- Never create tags or releases without explicit approval: a person publishes them (see
+  [Releasing](docs/DEVELOPMENT.md#releasing)).
+- Never commit, paste or upload real location data (see the
+  [guardrails](.agents/rules/scraper-guardrails.md)).
+- Never run destructive adb commands, or install or uninstall apps on the phone.
+- Never add a runtime dependency without approval.
+- Never bypass the hooks (`--no-verify`) or weaken a check to make it pass.
+- Never attribute work to an AI tool in commits, PRs, docs or comments (see `create-commit`).
+- Edit agent assets only under `.agents/`, then run `make sync-agents`; never edit the generated
+  pointers in `.claude/skills/`, `.github/skills/`, `.github/instructions/` or `.cursor/rules/`.
+
+## Skills
+
+| Skill           | Use it to                                                 |
+|-----------------|-----------------------------------------------------------|
+| `create-branch` | Create a branch from an issue or a short description      |
+| `create-commit` | Commit a scoped change with a Conventional Commit message |
+| `write-pr`      | Fill the PR template into `pr-body.tmp`                   |
+| `make-pr`       | Push and open the PR against `main`                       |
+| `write-issue`   | File an issue, with the device details a scrape bug needs |

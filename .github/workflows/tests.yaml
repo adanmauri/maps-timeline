@@ -1,148 +1,101 @@
 ---
 name: Tests & Coverage
 
-on: # yamllint disable-line rule:truthy
+on:
   push:
     branches:
       - main
   pull_request:
     branches:
       - main
-    types:
-      - opened
-      - ready_for_review
-      - reopened
-      - synchronize
+
+permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
-env:
-  PYTHON_VERSION: "3.13"
-
 jobs:
+  changes:
+    # Pull requests that change none of the files the tests depend on skip them; main always runs
+    # them (docs/adr/0012). The filter lives in a job, not in `paths:`, because `test` is a
+    # required check: a job skipped by its condition reports success, while a workflow that never
+    # starts leaves the check pending and blocks the merge.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide whether the tests run
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          TESTED_FILES: >-
+            ^(maps_timeline/|tests/|pyproject\.toml|uv\.lock|\.python-version|\.github/workflows/tests\.yaml)
+        run: |
+          run=true
+          if [ "$EVENT_NAME" = pull_request ] &&
+            ! git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE "$TESTED_FILES"; then
+            run=false
+          fi
+          echo "Run the tests: $run"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   test:
-    name: Run Tests
+    # The development Python (.python-version), with the 100% coverage gate from pyproject.toml.
+    # The README's coverage badge is static: it states this gate, so it changes with it.
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
           enable-cache: true
-          cache-dependency-glob: |
-            uv.lock
-            pyproject.toml
 
       - name: Install dependencies
-        run: uv sync --group dev --frozen
+        run: uv sync --locked --no-default-groups --group test
 
-      - name: Run tests with coverage
-        run: |
-          set -euo pipefail
-          uv run pytest \
-            --cov=maps_timeline \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --cov-report=json \
-            -v
+      - name: Run tests with the coverage gate
+        run: uv run --no-sync pytest
 
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-reports
-          path: |
-            coverage.xml
-            coverage.json
-          if-no-files-found: error
-
-  coverage_badge:
-    name: Update Coverage Badge
+  test-compat:
+    # Python 3.13, the oldest the tool supports (requires-python), in a throwaway environment.
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
-    needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v8
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: coverage-reports
+          persist-credentials: false
 
-      - name: Extract coverage percentage
-        id: coverage
-        run: |
-          python - << 'PY'
-          import json
-          import os
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
 
-          with open("coverage.json", "r", encoding="utf-8") as f:
-              d = json.load(f)
-
-          cov = float(d["totals"]["percent_covered"])
-          rounded = int(min(100, max(0, round(cov / 5) * 5)))
-
-          if cov >= 90:
-              color = "brightgreen"
-          elif cov >= 80:
-              color = "green"
-          elif cov >= 70:
-              color = "yellowgreen"
-          elif cov >= 60:
-              color = "yellow"
-          elif cov >= 50:
-              color = "orange"
-          else:
-              color = "red"
-
-          out_path = os.environ.get("GITHUB_OUTPUT", "")
-          with open(out_path, "a", encoding="utf-8") as out:
-              out.write(f"coverage={cov:.2f}\n")
-              out.write(f"rounded={rounded}\n")
-              out.write(f"color={color}\n")
-
-          print(f"Coverage: {cov:.2f}% (badge {rounded}%, {color})")
-          PY
-
-      - name: Update README coverage badge
-        id: readme
-        run: |
-          set -euo pipefail
-          ROUNDED="${{ steps.coverage.outputs.rounded }}"
-          COLOR="${{ steps.coverage.outputs.color }}"
-          NEW_BADGE="https://img.shields.io/badge/coverage-${ROUNDED}%25-${COLOR}.svg"
-
-          if grep -qF "$NEW_BADGE" README.md; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          sed -i "s|https://img.shields.io/badge/coverage-[0-9]\+%25-[a-z-]\+\.svg|$NEW_BADGE|g" README.md
-
-          if git diff --quiet README.md; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit coverage badge
-        if: steps.readme.outputs.changed == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add README.md
-          git commit -m "chore: update coverage badge [skip ci]"
-          git push
+      - name: Run tests on Python 3.13
+        run: make test-compat

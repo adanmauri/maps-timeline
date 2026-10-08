@@ -1,0 +1,5 @@
+[flake8]
+max-line-length = 100
+# E203 (whitespace before ':') and W503 (line break before a binary operator) conflict with Black.
+extend-ignore = E203, W503
+exclude = .venv, build, dist, __pycache__

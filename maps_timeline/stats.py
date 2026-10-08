@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 _PLACE_TYPES = ("place_visit", "unconfirmed_visit")
+_VISIT_TYPES = ("place_visit", "unconfirmed_visit", "unknown_visit")
 
 
 def load_dataframe(source: Path) -> pd.DataFrame:
@@ -61,6 +62,22 @@ def _activity_modes(df: pd.DataFrame) -> list[tuple[str, float, float]]:
     return sorted(modes, key=lambda item: (-item[1], -item[2], item[0]))
 
 
+def _geocoded(df: pd.DataFrame) -> tuple[int, int] | None:
+    """Return ``(resolved, with_address)`` for geocoded scrape-only datasets, else None."""
+    if "lat" not in df or "source" in df:
+        return None
+    with_address = df["address"].notna().sum() if "address" in df else len(df)
+    return int(df["lat"].notna().sum()), int(with_address)
+
+
+def _named_visits(df: pd.DataFrame) -> tuple[int, int] | None:
+    """Return ``(named, total)`` visits for datasets merged with the official export."""
+    if "source" not in df:
+        return None
+    visits = df.loc[df["type"].isin(_VISIT_TYPES), "title"]
+    return int(visits.notna().sum()), int(len(visits))
+
+
 @dataclass
 class Summary:  # pylint: disable=too-many-instance-attributes
     """Aggregated metrics computed from the clean dataset."""
@@ -78,6 +95,8 @@ class Summary:  # pylint: disable=too-many-instance-attributes
     by_mode: list[tuple[str, float, float]] = field(default_factory=list)
     busiest_day: tuple[str, float] | None = None
     geocoded: tuple[int, int] | None = None
+    sources: dict[str, int] = field(default_factory=dict)  # merged datasets only
+    named_visits: tuple[int, int] | None = None  # merged datasets only
 
 
 def summarize(df: pd.DataFrame, top: int = 10) -> Summary:
@@ -89,7 +108,12 @@ def summarize(df: pd.DataFrame, top: int = 10) -> Summary:
     by_type = {str(k): int(v) for k, v in df["type"].value_counts().items()}
 
     distance = df["distance_km"] if "distance_km" in df else pd.Series(dtype=float)
-    duration = df["duration_min"] if "duration_min" in df else pd.Series(dtype=float)
+    # Visits from the official export carry their stay duration; travel time is trips only.
+    duration = (
+        df.loc[~df["type"].isin(_VISIT_TYPES), "duration_min"]
+        if "duration_min" in df
+        else pd.Series(dtype=float)
+    )
 
     place_mask = df["type"].isin(_PLACE_TYPES)
     confirmed_places = df.loc[df["type"] == "place_visit", "title"].dropna()
@@ -108,12 +132,6 @@ def summarize(df: pd.DataFrame, top: int = 10) -> Summary:
         if not per_day.empty and per_day.max() > 0:
             busiest_day = (str(per_day.idxmax()), float(per_day.max()))
 
-    geocoded: tuple[int, int] | None = None
-    if "lat" in df:
-        with_address = df["address"].notna().sum() if "address" in df else len(df)
-        resolved = int(df["lat"].notna().sum())
-        geocoded = (resolved, int(with_address))
-
     return Summary(
         days=len(days),
         date_from=days[0] if days else None,
@@ -127,7 +145,13 @@ def summarize(df: pd.DataFrame, top: int = 10) -> Summary:
         top_places=top_places,
         by_mode=_activity_modes(df),
         busiest_day=busiest_day,
-        geocoded=geocoded,
+        geocoded=_geocoded(df),
+        sources=(
+            {str(k): int(v) for k, v in df["source"].value_counts().items()}
+            if "source" in df
+            else {}
+        ),
+        named_visits=_named_visits(df),
     )
 
 
@@ -160,6 +184,12 @@ def render(summary: Summary) -> str:
     if summary.geocoded:
         resolved, total = summary.geocoded
         lines.append(f"Geocoded:         {resolved}/{total} addresses resolved")
+    if summary.sources:
+        counts = " | ".join(f"{name} {count}" for name, count in sorted(summary.sources.items()))
+        lines.append(f"Sources:          {counts}")
+    if summary.named_visits:
+        named, total = summary.named_visits
+        lines.append(f"Named visits:     {named}/{total}")
 
     lines.append("")
     lines.append("Entries by type:")
